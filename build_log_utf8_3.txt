@@ -1,0 +1,34 @@
+﻿
+> chronicle@0.0.0 build
+> vite build
+
+[36mvite v7.2.6 [32mbuilding client environment for production...[36m[39m
+transforming...
+[32mΓ£ô[39m 2343 modules transformed.
+node.exe : [31mΓ£ù[39m Build failed in 11.88s
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([31mΓ£ù[39m Build failed in 11.88s:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+[31merror during build:
+[31msrc/views/ReceivablesView.jsx (3:43): "ArrowUpDown" is not exported by "src/components/Icons.jsx", imported by "src/views/ReceivablesView.jsx".[31m
+file: [36mC:/Users/jnybr/OneDrive/Desktop/CTemp/chronicle/src/views/ReceivablesView.jsx:3:43[31m
+[33m
+1: import React, { useState, useMemo } from 'react';
+2: import { Card } from '../components/UIComponents';
+3: import { User, ScrollText, Search, Filter, ArrowUpDown } from '../components/Icons';
+                                              ^
+4: import { formatCurrency } from '../utils/helpers';
+[31m
+    at getRollupError (file:///C:/Users/jnybr/OneDrive/Desktop/CTemp/chronicle/node_modules/rollup/dist/es/shared/parseAst.js:401:41)
+    at error (file:///C:/Users/jnybr/OneDrive/Desktop/CTemp/chronicle/node_modules/rollup/dist/es/shared/parseAst.js:397:42)
+    at Module.error (file:///C:/Users/jnybr/OneDrive/Desktop/CTemp/chronicle/node_modules/rollup/dist/es/shared/node-entry.js:16956:16)
+    at Module.traceVariable (file:///C:/Users/jnybr/OneDrive/Desktop/CTemp/chronicle/node_modules/rollup/dist/es/shared/node-entry.js:17412:29)
+    at ModuleScope.findVariable (file:///C:/Users/jnybr/OneDrive/Desktop/CTemp/chronicle/node_modules/rollup/dist/es/shared/node-entry.js:15076:39)
+    at ReturnValueScope.findVariable (file:///C:/Users/jnybr/OneDrive/Desktop/CTemp/chronicle/node_modules/rollup/dist/es/shared/node-entry.js:5649:38)
+    at FunctionBodyScope.findVariable (file:///C:/Users/jnybr/OneDrive/Desktop/CTemp/chronicle/node_modules/rollup/dist/es/shared/node-entry.js:5649:38)
+    at Identifier.bind (file:///C:/Users/jnybr/OneDrive/Desktop/CTemp/chronicle/node_modules/rollup/dist/es/shared/node-entry.js:5423:40)
+    at CallExpression.bind (file:///C:/Users/jnybr/OneDrive/Desktop/CTemp/chronicle/node_modules/rollup/dist/es/shared/node-entry.js:2809:28)
+    at CallExpression.bind (file:///C:/Users/jnybr/OneDrive/Desktop/CTemp/chronicle/node_modules/rollup/dist/es/shared/node-entry.js:12123:15)[39m

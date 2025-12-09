@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    font-family: 'Crimson Pro', serif;
+    transition: background-color 0.3s, color 0.3s;
+  }
+  h1, h2, h3, h4 {
+    font-family: 'Cinzel', serif;
+  }
+}
+
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+.error-screen { padding: 2rem; color: #7f1d1d; background: #fef2f2; font-family: monospace; }
+
+/* Prose / Markdown */
+.prose p { margin-bottom: 0.75em; line-height: 1.6; }
+.prose h3 { font-family: 'Cinzel', serif; font-weight: bold; margin-top: 1.5em; margin-bottom: 0.5em; font-size: 1.1em; }
+.prose ul { list-style-type: disc; padding-left: 1.5em; margin-bottom: 0.75em; }
+.prose strong { font-weight: 600; color: inherit; }
+
+/* Animations */
+@keyframes pulse-ring {
+    0% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.7); }
+    70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(220, 38, 38, 0); }
+    100% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+}
+.mic-active { animation: pulse-ring 2s infinite; }
+
+/* Old Book Button & Input */
+.old-book-btn { transition: all 0.2s; }
+.old-book-btn:hover { transform: translate(1px, 1px); }
+.old-book-input { box-shadow: inset 2px 2px 4px rgba(0,0,0,0.2); }
