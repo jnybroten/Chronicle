@@ -100,11 +100,6 @@ const LedgerView = ({
             <div className="flex justify-between items-center">
                 <div className="flex items-center gap-4">
                     <h2 className="text-3xl font-cinzel">Ledger</h2>
-                    {(!viewAllTime && !filterStartDate && !filterEndDate) && (
-                        <div className="hidden sm:block transform scale-90 origin-left">
-                            <MonthSelector currentMonth={selectedMonth} onChange={(m) => { setSelectedMonth(m); setViewAllTime(false); }} theme={theme} />
-                        </div>
-                    )}
                     {viewAllTime && <span className="px-3 py-1 rounded border bg-emerald-100 text-emerald-800 border-emerald-200 text-xs font-bold shadow-sm animate-in fade-in">All Time View</span>}
                 </div>
             </div>

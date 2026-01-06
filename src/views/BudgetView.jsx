@@ -99,7 +99,7 @@ const BudgetView = ({
                     </div>
                     <div className="text-right z-10"><div className="text-xs font-bold uppercase opacity-50 mb-1">Status</div><div className={`font-bold font-cinzel text-sm px-3 py-1 rounded-full border ${questChestData.isPositive ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-stone-200 text-stone-600 border-stone-300'}`}>{questChestData.isPositive ? 'Abundant' : 'Depleted'}</div></div>
                 </div>
-                <Card theme={theme}><div className="flex justify-between items-center mb-2"><h2 className="text-3xl font-bold font-cinzel">Monthly Budget</h2></div><div className="flex items-center gap-4"><MonthSelector currentMonth={selectedMonth} onChange={setSelectedMonth} theme={theme} /></div></Card>
+                <Card theme={theme}><div className="flex justify-between items-center mb-2"><h2 className="text-3xl font-bold font-cinzel">Monthly Budget</h2></div></Card>
                 <Card theme={theme}>{(() => {
                     const prevDate = new Date(selectedMonth + '-01'); prevDate.setMonth(prevDate.getMonth() - 1);
                     const prevMonthKey = prevDate.toISOString().slice(0, 7);

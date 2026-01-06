@@ -1574,7 +1574,7 @@ const ChronicleApp = () => {
                             <h1 className="text-xl font-bold font-cinzel truncate">Chronicle</h1>
                         </div>
 
-                        {currentView === 'dashboard' && (
+                        {['dashboard', 'budget', 'ledger'].includes(currentView) && (
                             <div className="scale-100 origin-right shrink-0 ml-2">
                                 <MonthSelector
                                     currentMonth={selectedMonth}
@@ -1636,7 +1636,7 @@ const ChronicleApp = () => {
                                 <h1 className="text-2xl font-bold font-cinzel">Chronicle</h1>
                             </div>
                             <div className="flex items-center gap-6">
-                                {currentView === 'dashboard' && (
+                                {['dashboard', 'budget', 'ledger'].includes(currentView) && (
                                     <div>
                                         <MonthSelector
                                             currentMonth={selectedMonth}
