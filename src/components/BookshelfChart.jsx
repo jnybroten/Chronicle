@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { formatCurrency } from '../utils/helpers';
+import { formatCurrency, round } from '../utils/helpers';
 
 const BookshelfChart = ({ history, accounts, currentAssets, currentLiabilities, theme }) => {
     const today = new Date();
@@ -74,7 +74,7 @@ const BookshelfChart = ({ history, accounts, currentAssets, currentLiabilities, 
                 });
 
                 Object.keys(blockSums).forEach(id => {
-                    runningBalances[id] = blockSums[id] / blockCounts[id];
+                    runningBalances[id] = round(blockSums[id] / blockCounts[id]);
                 });
 
                 let totalAssets = 0;
@@ -86,7 +86,7 @@ const BookshelfChart = ({ history, accounts, currentAssets, currentLiabilities, 
                 });
                 const isPast = blockEnd < now;
                 const val = isPast ? totalAssets : (totalAssets - totalLiabilities);
-                group.points.push({ label, type, value: val });
+                group.points.push({ label, type, value: round(val) });
             };
 
             if (midMonth <= now || (midMonth > now && isCurrentMonth)) {

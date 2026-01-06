@@ -13,7 +13,7 @@ import LedgerView from './views/LedgerView';
 import AccountsView from './views/AccountsView';
 import ReceivablesView from './views/ReceivablesView';
 import ErrorBoundary from './components/ErrorBoundary';
-import { DEFAULT_CATEGORIES, THEMES, formatCurrency, norm, addToQueue, getQueue, removeFromQueue } from './utils/helpers';
+import { DEFAULT_CATEGORIES, THEMES, formatCurrency, norm, addToQueue, getQueue, removeFromQueue, round } from './utils/helpers';
 import customQuill from './assets/custom_quill.png';
 import sealImg from './assets/seal.png';
 
@@ -76,6 +76,7 @@ const ChronicleApp = () => {
     const [defaultAccountId, setDefaultAccountId] = useState('');
 
     const [filterCategory, setFilterCategory] = useState('all');
+    const [filterAccount, setFilterAccount] = useState('all');
     const [filterStartDate, setFilterStartDate] = useState('');
     const [filterEndDate, setFilterEndDate] = useState('');
     const [filterMinAmount, setFilterMinAmount] = useState('');
@@ -266,7 +267,7 @@ const ChronicleApp = () => {
             if (!snap.exists) {
                 await setDoc(ref, budgetSnapshot);
             }
-        }
+        };
     };
 
     useEffect(() => {
@@ -311,11 +312,42 @@ const ChronicleApp = () => {
     }, [user, subscriptions, categories, monthlyBudgets]);
 
     const [transactionAmount, setTransactionAmount] = useState(0);
+    const [transactionDescription, setTransactionDescription] = useState('');
+
+    const smartTags = useMemo(() => {
+        if (!transactionDescription || transactionDescription.length < 3) return [];
+        const cleanDesc = norm(transactionDescription);
+
+        // Find matching historical transactions
+        const matches = transactions.filter(t =>
+            norm(t.description).includes(cleanDesc) ||
+            cleanDesc.includes(norm(t.description))
+        );
+
+        if (matches.length === 0) return [];
+
+        // Aggregate tags from matches
+        const tagCounts = {};
+        matches.forEach(t => {
+            if (t.tags && t.tags.length > 0) {
+                t.tags.forEach(tag => {
+                    tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+                });
+            }
+        });
+
+        // Sort by frequency and take top 5
+        return Object.entries(tagCounts)
+            .sort(([, a], [, b]) => b - a)
+            .map(([tag]) => tag)
+            .slice(0, 5);
+    }, [transactionDescription, transactions]);
 
 
     useEffect(() => {
         if (editingTransaction) {
             setTransactionAmount(editingTransaction.amount);
+            setTransactionDescription(editingTransaction.description || ''); // Initialize description
             if (editingTransaction.splits && editingTransaction.splits.length > 0) {
                 setIsSplitMode(true);
                 setSplitRows(editingTransaction.splits);
@@ -331,6 +363,7 @@ const ChronicleApp = () => {
             setIsRecurringMode(!!editingTransaction.isRecurring);
         } else {
             setTransactionAmount(0);
+            setTransactionDescription(''); // Reset description
             setIsSplitMode(false);
             setIsRecurringMode(false);
             setSplitRows([]);
@@ -371,7 +404,7 @@ const ChronicleApp = () => {
             if (!user) return;
             const fd = new FormData(e.target);
 
-            const amount = parseFloat(transactionAmount);
+            const amount = round(transactionAmount);
             const date = fd.get('date');
             const description = fd.get('description');
             const type = fd.get('type') || 'expense';
@@ -380,7 +413,7 @@ const ChronicleApp = () => {
             const isRecurring = fd.get('isRecurring') === 'on';
 
             if (isSplitMode) {
-                const splitTotal = splitRows.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+                const splitTotal = splitRows.reduce((sum, r) => sum + (round(r.amount) || 0), 0);
                 if (Math.abs(splitTotal - amount) > 0.02) {
                     showToast('error', `Split total (${splitTotal.toFixed(2)}) does not match transaction amount (${amount.toFixed(2)})`);
                     return;
@@ -396,7 +429,7 @@ const ChronicleApp = () => {
 
             const cleanedSplits = isSplitMode ? splitRows.map(r => ({
                 ...r,
-                amount: parseFloat(r.amount),
+                amount: round(r.amount),
                 target: ((r.category === 'receivable' || r.category === 'payable') && !r.target?.trim()) ? 'Unassigned' : (r.target || null),
                 status: (r.category === 'receivable' || r.category === 'payable') ? (r.status || 'open') : null
             })) : [];
@@ -564,6 +597,7 @@ const ChronicleApp = () => {
             }
         }
         if (filterCategory !== 'all') data = data.filter(t => t.category === filterCategory);
+        if (filterAccount !== 'all') data = data.filter(t => t.accountId === filterAccount);
         if (filterTag !== 'all') data = data.filter(t => t.tags && t.tags.includes(filterTag));
         if (filterMinAmount) data = data.filter(t => t.amount >= parseFloat(filterMinAmount));
         if (filterMaxAmount) data = data.filter(t => t.amount <= parseFloat(filterMaxAmount));
@@ -629,7 +663,7 @@ const ChronicleApp = () => {
         });
 
         const nonSavingsExpense = totalExpense - savingsContributions;
-        const savingsRate = income > 0 ? ((income - nonSavingsExpense) / income) * 100 : 0;
+        const savingsRate = income > 0 ? round(((income - nonSavingsExpense) / income) * 100) : 0;
 
         return { assets, liabilities, netWorth, income, expense: totalExpense, cashFlow: income - totalExpense, savingsRate };
     }, [accounts, transactions, selectedMonth]);
@@ -651,7 +685,7 @@ const ChronicleApp = () => {
             }
         });
 
-        return Object.entries(catMap).map(([name, value]) => ({ name, value })).filter(i => i.value > 0);
+        return Object.entries(catMap).map(([name, value]) => ({ name, value: round(value) })).filter(i => i.value > 0);
     }, [transactions, selectedMonth]);
 
     const trendData = useMemo(() => {
@@ -672,7 +706,7 @@ const ChronicleApp = () => {
                     }
                 }
             });
-            return { inc, exp };
+            return { inc: round(inc), exp: round(exp) };
         };
 
         if (cashFlowView === '6month') {
@@ -732,7 +766,7 @@ const ChronicleApp = () => {
             rawData.forEach(item => {
                 const act = item.action;
                 if (act === 'transaction') {
-                    const amount = parseFloat(item.amount);
+                    const amount = round(item.amount);
                     const type = item.type || 'expense';
                     const categoryId = item.category || 'misc';
                     const date = item.date || new Date().toISOString();
@@ -749,7 +783,7 @@ const ChronicleApp = () => {
                     const id = item.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
                     const newAcc = {
                         id, name: item.name, type: item.type || 'asset',
-                        subtype: item.subtype || 'other', balance: parseFloat(item.balance || 0)
+                        subtype: item.subtype || 'other', balance: round(item.balance || 0)
                     };
                     batch.set(doc(getSubColl(user.uid, 'accounts'), id), newAcc);
                     tempAccountsMap.set(id, newAcc);
@@ -758,20 +792,20 @@ const ChronicleApp = () => {
                 } else if (act === 'update_account_balance') {
                     const target = findAccount(item.name);
                     if (target) {
-                        batch.update(doc(getSubColl(user.uid, 'accounts'), target.id), { balance: parseFloat(item.balance) });
-                        tempAccountsMap.set(target.id, { ...target, balance: parseFloat(item.balance) });
+                        batch.update(doc(getSubColl(user.uid, 'accounts'), target.id), { balance: round(item.balance) });
+                        tempAccountsMap.set(target.id, { ...target, balance: round(item.balance) });
                         accountsChanged = true;
                         count++;
                     }
                 } else if (act === 'add_category') {
                     const id = item.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
-                    batch.set(doc(getSubColl(user.uid, 'categories'), id), { id: id, name: item.name, budget: parseFloat(item.budget || 0) });
+                    batch.set(doc(getSubColl(user.uid, 'categories'), id), { id: id, name: item.name, budget: round(item.budget || 0) });
                     count++;
                 } else if (act === 'update_category_budget') {
                     const target = categories.find(c => norm(c.name) === norm(item.name));
-                    if (target) { batch.update(doc(getSubColl(user.uid, 'categories'), target.id), { budget: parseFloat(item.budget) }); count++; }
+                    if (target) { batch.update(doc(getSubColl(user.uid, 'categories'), target.id), { budget: round(item.budget) }); count++; }
                 } else if (act === 'add_subscription') {
-                    batch.set(doc(getSubColl(user.uid, 'subscriptions')), { name: item.name, amount: parseFloat(item.amount), dayOfMonth: parseInt(item.dayOfMonth || 1), category: item.category || 'misc', lastProcessed: null });
+                    batch.set(doc(getSubColl(user.uid, 'subscriptions')), { name: item.name, amount: round(item.amount), dayOfMonth: parseInt(item.dayOfMonth || 1), category: item.category || 'misc', lastProcessed: null });
                     count++;
                 } else if (act === 'record_history_point') {
                     const histDate = item.date ? new Date(item.date) : new Date();
@@ -783,7 +817,7 @@ const ChronicleApp = () => {
                     balancesList.forEach(b => {
                         const target = findAccount(b.name);
                         if (target) {
-                            const val = parseFloat(b.balance);
+                            const val = round(b.balance);
                             accountBalances[target.id] = val;
                             if (target.type === 'asset') tAssets += val;
                             else tLiabilities += val;
@@ -798,7 +832,7 @@ const ChronicleApp = () => {
                 } else if (act === 'transfer') {
                     const fromAccount = findAccount(item.fromAccount);
                     const toAccount = findAccount(item.toAccount);
-                    const amount = parseFloat(item.amount);
+                    const amount = round(item.amount);
                     const date = item.date || new Date().toISOString();
                     const description = item.description || 'Transfer';
 
@@ -835,10 +869,10 @@ const ChronicleApp = () => {
             await batch.commit();
             if (accountsChanged) {
                 const finalAccounts = Array.from(tempAccountsMap.values());
-                const totalAssets = finalAccounts.filter(a => a.type === 'asset').reduce((sum, a) => sum + (parseFloat(a.balance) || 0), 0);
-                const totalLiabilities = finalAccounts.filter(a => a.type === 'liability').reduce((sum, a) => sum + (parseFloat(a.balance) || 0), 0);
+                const totalAssets = finalAccounts.filter(a => a.type === 'asset').reduce((sum, a) => sum + (round(a.balance) || 0), 0);
+                const totalLiabilities = finalAccounts.filter(a => a.type === 'liability').reduce((sum, a) => sum + (round(a.balance) || 0), 0);
                 const accountBalances = {};
-                finalAccounts.forEach(a => { accountBalances[a.id] = parseFloat(a.balance) || 0; });
+                finalAccounts.forEach(a => { accountBalances[a.id] = round(a.balance) || 0; });
                 await getSubColl(user.uid, 'history').add({ date: new Date().toISOString(), totalAssets, totalLiabilities, netWorth: totalAssets - totalLiabilities, accountBalances });
             }
             showToast('success', `Scribe wrote ${count} entries.`);
@@ -902,6 +936,17 @@ const ChronicleApp = () => {
         return "gemini-1.5-flash"; // Fallback
     };
 
+    const fetchExchangeRate = async () => {
+        try {
+            const res = await fetch('https://api.exchangerate-api.com/v4/latest/EUR');
+            const data = await res.json();
+            return data.rates.USD;
+        } catch (e) {
+            console.error("Failed to fetch exchange rate", e);
+            return 1.10; // Fallback rate
+        }
+    };
+
     const handleScribeRequest = async (inputText = null, skipQueue = false) => {
         const textToProcess = inputText || scribeInput;
         if (!geminiApiKey) { showToast('error', 'Please enter a Gemini API Key to use the Scribe.'); return; }
@@ -921,6 +966,8 @@ const ChronicleApp = () => {
             const ai = new GoogleGenerativeAI(geminiApiKey.trim());
             const model = ai.getGenerativeModel({ model: modelName });
 
+            const eurRate = await fetchExchangeRate();
+
             const systemPrompt = `
                 You are "The Royal Scribe" of Chronicle, a personal finance assistant.
                 Your role is to listen to the user's financial tales and transcribe them into structured records.
@@ -930,6 +977,7 @@ const ChronicleApp = () => {
                 - Existing Categories: ${JSON.stringify(categories.map(c => ({ id: c.id, name: c.name })))}
                 - Existing Accounts: ${JSON.stringify(accounts.map(a => ({ name: a.name, id: a.id })))}
                 - Default Account ID: ${defaultAccountId || 'none'}
+                - EUR to USD Rate: ${eurRate} (If user mentions Euros/EUR/€, convert to USD using this rate)
 
                 You must output a raw JSON array (and ONLY a JSON array, no markdown formatting) compatible with the app's importer.
                 
@@ -954,6 +1002,7 @@ const ChronicleApp = () => {
                 - If the user says "I owe [Person]", use "add_payable".
                 - If the user specifies an account (e.g. "from Savings"), use that account's ID in "accountId".
                 - If NO account is specified, use the Default Account ID: '${defaultAccountId}'. If that is empty/none, leave "accountId" null or empty.
+                - If the user specifies an amount in EUR/Euros/€, you MUST convert it to USD using the rate ${eurRate}. Example: "10 euros" -> 10 * ${eurRate} = ${10 * eurRate} USD. Store the USD amount.
                 
                 CRITICAL INSTRUCTION:
                 - You MUST accurately and consistently tag transactions. Tags are crucial for the user's organization.
@@ -985,7 +1034,7 @@ const ChronicleApp = () => {
                     setEditingTransaction({
                         id: null,
                         description: p.description,
-                        amount: parseFloat(p.amount),
+                        amount: round(p.amount),
                         type: 'expense',
                         category: 'split',
                         date: new Date().toISOString(),
@@ -993,7 +1042,7 @@ const ChronicleApp = () => {
                         isRecurring: false,
                         accountId: null, // Debt usually isn't paid from an account yet
                         splits: [
-                            { id: Date.now(), amount: parseFloat(p.amount), category: 'payable', target: p.target, note: p.description, status: 'open' }
+                            { id: Date.now(), amount: round(p.amount), category: 'payable', target: p.target, note: p.description, status: 'open' }
                         ]
                     });
                     setTransactionModalOpen(true);
@@ -1007,7 +1056,7 @@ const ChronicleApp = () => {
                     setEditingTransaction({
                         id: null, // Draft mode
                         description: t.description,
-                        amount: parseFloat(t.amount),
+                        amount: round(t.amount),
                         type: t.type || 'expense',
                         category: t.category || 'misc',
                         date: t.date || new Date().toISOString(),
@@ -1092,7 +1141,7 @@ const ChronicleApp = () => {
             name: fd.get('name'),
             type: fd.get('type'),
             subtype: fd.get('subtype'),
-            balance: parseFloat(fd.get('balance'))
+            balance: round(fd.get('balance'))
         };
         let ref;
         if (editingAccount) { ref = doc(getSubColl(user.uid, 'accounts'), editingAccount.id); await setDoc(ref, data, { merge: true }); recordHistorySnapshot({ id: editingAccount.id, ...data }); }
@@ -1106,7 +1155,7 @@ const ChronicleApp = () => {
         const fd = new FormData(e.target);
         const fromId = fd.get('fromAccount');
         const toId = fd.get('toAccount');
-        const amount = parseFloat(fd.get('amount'));
+        const amount = round(fd.get('amount'));
         const date = fd.get('date') || new Date().toISOString();
         const description = fd.get('description') || 'Fund Transfer';
 
@@ -1147,7 +1196,7 @@ const ChronicleApp = () => {
         e.preventDefault();
         if (!user || !reconcileAccount) return;
         const fd = new FormData(e.target);
-        const actualBalance = parseFloat(fd.get('actualBalance'));
+        const actualBalance = round(fd.get('actualBalance'));
         const currentBalance = reconcileAccount.balance;
         const diff = actualBalance - currentBalance;
 
@@ -1178,7 +1227,7 @@ const ChronicleApp = () => {
             description: 'Balance Reconciliation',
             amount: amount,
             type: txType,
-            category: 'misc', // Or a specific 'reconciliation' category if it existed
+            category: 'reconciliation',
             date: new Date().toISOString(),
             tags: ['reconciliation'],
             isRecurring: false,
@@ -1203,7 +1252,7 @@ const ChronicleApp = () => {
     const handleSubscriptionSave = async (e) => {
         if (!user) return;
         e.preventDefault(); const fd = new FormData(e.target);
-        const data = { name: fd.get('name'), amount: parseFloat(fd.get('amount')), dayOfMonth: parseInt(fd.get('dayOfMonth')), category: fd.get('category'), tags: fd.get('tags').split(',').map(t => t.trim()).filter(Boolean) };
+        const data = { name: fd.get('name'), amount: round(fd.get('amount')), dayOfMonth: parseInt(fd.get('dayOfMonth')), category: fd.get('category'), tags: fd.get('tags').split(',').map(t => t.trim()).filter(Boolean) };
         let ref;
         if (editingSubscription) ref = doc(getSubColl(user.uid, 'subscriptions'), editingSubscription.id);
         else ref = doc(getSubColl(user.uid, 'subscriptions'));
@@ -1291,7 +1340,7 @@ const ChronicleApp = () => {
             return false;
         }
     };
-    const resetFilters = () => { setFilterCategory('all'); setFilterTag('all'); setFilterStartDate(''); setFilterEndDate(''); setFilterMinAmount(''); setFilterMaxAmount(''); setSearchTerm(''); };
+    const resetFilters = () => { setFilterCategory('all'); setFilterAccount('all'); setFilterTag('all'); setFilterStartDate(''); setFilterEndDate(''); setFilterMinAmount(''); setFilterMaxAmount(''); setSearchTerm(''); };
     const runExport = () => {
         const rows = filteredTransactions.map(t => [t.date.substring(0, 10), `"${t.description}"`, t.type, t.category, t.amount.toFixed(2), `"${(t.tags || []).join(',')}"`]);
         const csv = ["Date,Description,Type,Category,Amount,Tags", ...rows.map(r => r.join(','))].join('\n');
@@ -1518,12 +1567,24 @@ const ChronicleApp = () => {
                 <ErrorBoundary>
                     {/* Mobile Header - Fixed Height */}
                     <div className="h-16 flex-none flex md:hidden bg-white border-b-2 z-50 relative justify-between items-center px-4" style={{ backgroundColor: theme.bg, borderColor: theme.borderColor }}>
-                        <div className="flex items-center gap-3">
-                            <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 rounded hover:bg-black/5">
+                        <div className="flex items-center gap-3 min-w-0"> {/* added min-w-0 for flex truncation safety if needed, but mostly removing max-w */}
+                            <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 rounded hover:bg-black/5 shrink-0">
                                 {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
                             </button>
-                            <h1 className="text-xl font-bold font-cinzel">Chronicle</h1>
+                            <h1 className="text-xl font-bold font-cinzel truncate">Chronicle</h1>
                         </div>
+
+                        {currentView === 'dashboard' && (
+                            <div className="scale-100 origin-right shrink-0 ml-2">
+                                <MonthSelector
+                                    currentMonth={selectedMonth}
+                                    onChange={(m) => { setSelectedMonth(m); setViewAllTime(false); }}
+                                    theme={theme}
+                                    abbreviated={true}
+                                />
+                            </div>
+                        )}
+
                         <div className="flex items-center gap-3 relative hidden md:flex"> {/* Note: keeping hidden md:flex logic but clarifying structure */}
                             <button
                                 onClick={() => setScribeModalOpen(true)}
@@ -1574,7 +1635,16 @@ const ChronicleApp = () => {
                             <div className="flex items-center gap-3">
                                 <h1 className="text-2xl font-bold font-cinzel">Chronicle</h1>
                             </div>
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-6">
+                                {currentView === 'dashboard' && (
+                                    <div>
+                                        <MonthSelector
+                                            currentMonth={selectedMonth}
+                                            onChange={(m) => { setSelectedMonth(m); setViewAllTime(false); }}
+                                            theme={theme}
+                                        />
+                                    </div>
+                                )}
                                 <button onClick={() => setScribeModalOpen(true)} className="px-4 py-2 rounded-full font-bold flex items-center gap-2 text-sm shadow-md hover:brightness-110 active:scale-95 transition-all bg-amber-700 text-amber-50 border border-amber-600/50">
                                     <Sparkles size={16} /> Scribe
                                 </button>
@@ -1645,6 +1715,9 @@ const ChronicleApp = () => {
                                     setFilterMaxAmount={setFilterMaxAmount}
                                     filterCategory={filterCategory}
                                     setFilterCategory={setFilterCategory}
+                                    filterAccount={filterAccount}
+                                    setFilterAccount={setFilterAccount}
+                                    accounts={accounts}
                                     categories={categories}
                                     resetFilters={resetFilters}
                                     runExport={runExport}
@@ -2261,7 +2334,14 @@ const ChronicleApp = () => {
 
                                     <div>
                                         <label className="text-xs font-bold uppercase">Description</label>
-                                        <input name="description" required defaultValue={editingTransaction?.description} className="w-full p-2 border rounded" style={{ background: theme.bg, color: theme.text }} />
+                                        <input
+                                            name="description"
+                                            required
+                                            value={transactionDescription}
+                                            onChange={(e) => setTransactionDescription(e.target.value)}
+                                            className="w-full p-2 border rounded"
+                                            style={{ background: theme.bg, color: theme.text }}
+                                        />
                                     </div>
 
                                     <div>
@@ -2438,6 +2518,7 @@ const ChronicleApp = () => {
                                             onChange={setSelectedTags}
                                             allTags={allTags}
                                             theme={theme}
+                                            suggestedTags={smartTags}
                                         />
                                     </div>
 

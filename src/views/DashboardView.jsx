@@ -1,5 +1,5 @@
 import React from 'react';
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis } from 'recharts';
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, Legend } from 'recharts';
 import { Card, KPICard, MonthSelector } from '../components/UIComponents';
 import BookshelfChart from '../components/BookshelfChart';
 import { ChevronLeft, ChevronRightIcon } from '../components/Icons';
@@ -12,9 +12,7 @@ const DashboardView = ({
 }) => {
     return (
         <div className="space-y-8 animate-in fade-in">
-            <div className="flex justify-between items-center">
-                <MonthSelector currentMonth={selectedMonth} onChange={(m) => { setSelectedMonth(m); setViewAllTime(false); }} theme={theme} />
-            </div>
+
 
             <Card className="p-4 sm:p-8 min-h-[300px]" theme={theme}>
                 <div className="flex flex-col md:flex-row justify-between items-end mb-6 gap-4">
@@ -41,10 +39,26 @@ const DashboardView = ({
                     <div className="h-64 w-full">
                         <ResponsiveContainer>
                             <PieChart>
-                                <Pie data={categoryPieData} innerRadius={50} outerRadius={80} paddingAngle={5} dataKey="value" label={({ name, percent }) => { const displayName = name === 'quest_chest' ? 'Quest' : name; return `${displayName} ${(percent * 100).toFixed(0)}%`; }}>
+                                <Pie
+                                    data={categoryPieData}
+                                    innerRadius={50}
+                                    outerRadius="70%"
+                                    paddingAngle={5}
+                                    dataKey="value"
+                                >
                                     {categoryPieData.map((entry, index) => <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[entry.name] || theme.textMuted} />)}
                                 </Pie>
-                                <Tooltip formatter={(value) => formatCurrency(value)} />
+                                <Tooltip formatter={(value, name) => {
+                                    const total = categoryPieData.reduce((sum, item) => sum + item.value, 0);
+                                    const percent = total > 0 ? ((value / total) * 100).toFixed(0) : 0;
+                                    return [`${formatCurrency(value)} (${percent}%)`, name];
+                                }} />
+                                <Legend formatter={(value, entry) => {
+                                    const total = categoryPieData.reduce((sum, item) => sum + item.value, 0);
+                                    const item = categoryPieData.find(d => d.name === value);
+                                    const percent = item && total > 0 ? ((item.value / total) * 100).toFixed(0) : 0;
+                                    return <span style={{ color: theme.textMain }}>{value} ({percent}%)</span>;
+                                }} />
                             </PieChart>
                         </ResponsiveContainer>
                     </div>

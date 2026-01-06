@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Plus, X } from './Icons';
 
-const HybridTagSelector = ({ selectedTags, onChange, allTags, theme }) => {
+const HybridTagSelector = ({ selectedTags, onChange, allTags, theme, suggestedTags = [] }) => {
     const [searchTerm, setSearchTerm] = useState('');
 
     // Get top 20 most frequent tags (assuming allTags is already sorted or just take first 20)
@@ -33,6 +33,26 @@ const HybridTagSelector = ({ selectedTags, onChange, allTags, theme }) => {
 
     return (
         <div className="space-y-3">
+            {suggestedTags.length > 0 && (
+                <div className="space-y-1 animate-in fade-in slide-in-from-top-1">
+                    <div className="text-[10px] uppercase font-bold opacity-60 tracking-wider flex items-center gap-1 text-emerald-600">
+                        <span className="text-emerald-500">✨</span> Smart Suggestions
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                        {suggestedTags.map(tag => (
+                            <button
+                                key={tag}
+                                onClick={() => handleAddTag(tag)}
+                                disabled={selectedTags.includes(tag)}
+                                className={`px-2 py-1 rounded border text-xs font-bold transition-all flex items-center gap-1 ${selectedTags.includes(tag) ? 'opacity-30 cursor-not-allowed border-transparent' : 'bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100 hover:scale-105'}`}
+                            >
+                                #{tag}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             <div className="flex flex-wrap gap-2">
                 {selectedTags.map(tag => (
                     <span key={tag} className="px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1 border" style={{ backgroundColor: theme.primary + '20', borderColor: theme.primary, color: theme.primary }}>

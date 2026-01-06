@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
-import { formatCurrency } from '../utils/helpers';
+import { formatCurrency, round } from '../utils/helpers';
 
 const AccountHistoryChart = ({ transactions = [], transfers = [], accountId, theme, currentBalance, history = [] }) => {
     const [timeRange, setTimeRange] = useState('all'); // '1m', '3m', '6m', '1y', 'all'
@@ -29,7 +29,7 @@ const AccountHistoryChart = ({ transactions = [], transfers = [], accountId, the
 
         const addChange = (dateStr, amount) => {
             const dateKey = normalizeDateKey(dateStr);
-            dailyChanges[dateKey] = (dailyChanges[dateKey] || 0) + amount;
+            dailyChanges[dateKey] = round((dailyChanges[dateKey] || 0) + amount);
         };
 
         relevantTrans.forEach(t => {
@@ -118,13 +118,13 @@ const AccountHistoryChart = ({ transactions = [], transfers = [], accountId, the
             // Point for "End of Day"
             points.push({
                 date: currentIterDate.getTime(),
-                balance: runningBalance,
+                balance: round(runningBalance),
                 displayDate: currentIterDate.toLocaleDateString()
             });
 
             // Apply reverse change to get "End of Yesterday" (Start of Today)
             const change = dailyChanges[dateKey] || 0;
-            runningBalance = runningBalance - change;
+            runningBalance = round(runningBalance - change);
 
             // Move to yesterday
             currentIterDate.setDate(currentIterDate.getDate() - 1);

@@ -46,7 +46,7 @@ export const Modal = ({ title, onClose, children, theme = DEFAULT_THEME }) => (
     </div>
 );
 
-export const MonthSelector = ({ currentMonth, onChange, theme = DEFAULT_THEME }) => {
+export const MonthSelector = ({ currentMonth, onChange, theme = DEFAULT_THEME, abbreviated = false }) => {
     const [year, month] = currentMonth.split('-').map(Number);
     const dateObj = new Date(year, month - 1, 1);
 
@@ -66,9 +66,11 @@ export const MonthSelector = ({ currentMonth, onChange, theme = DEFAULT_THEME })
 
     return (
         <div className="flex items-center rounded-lg border-2" style={{ backgroundColor: theme.cardBg, borderColor: theme.borderColor, boxShadow: `2px 2px 0px ${theme.borderColor}` }}>
-            <button onClick={handlePrev} className="p-3 hover:bg-black/5 rounded-l-lg" style={{ color: theme.textMuted }}><ChevronLeft size={20} /></button>
-            <div className="w-48 font-bold text-center font-cinzel text-lg" style={{ color: theme.text }}>{dateObj.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</div>
-            <button onClick={handleNext} className="p-3 hover:bg-black/5 rounded-r-lg" style={{ color: theme.textMuted }}><ChevronRightIcon size={20} /></button>
+            <button onClick={handlePrev} className="p-2 sm:p-3 hover:bg-black/5 rounded-l-lg" style={{ color: theme.textMuted }}><ChevronLeft size={abbreviated ? 16 : 20} /></button>
+            <div className={`${abbreviated ? 'w-24 text-sm' : 'w-48 text-lg'} font-bold text-center font-cinzel transition-all`} style={{ color: theme.text }}>
+                {dateObj.toLocaleDateString('en-US', { month: abbreviated ? 'short' : 'long', year: 'numeric' })}
+            </div>
+            <button onClick={handleNext} className="p-2 sm:p-3 hover:bg-black/5 rounded-r-lg" style={{ color: theme.textMuted }}><ChevronRightIcon size={abbreviated ? 16 : 20} /></button>
         </div>
     );
 };

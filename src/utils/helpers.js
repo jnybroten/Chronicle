@@ -34,7 +34,7 @@ export const THEMES = {
 export const CATEGORY_COLORS = {
     housing: '#3b82f6', food: '#ef4444', groceries: '#10b981', transport: '#f59e0b',
     utilities: '#06b6d4', entertainment: '#8b5cf6', shopping: '#ec4899', health: '#14b8a6',
-    misc: '#94a3b8', income: '#22c55e', savings: '#059669',
+    misc: '#94a3b8', income: '#22c55e', savings: '#059669', reconciliation: '#64748b',
 };
 
 export const ACCOUNT_SUBTYPES = {
@@ -51,3 +51,5 @@ export const ACCOUNT_SUBTYPES = {
 export const formatCurrency = (amount, decimals = 2) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(amount);
 
 export const norm = (str) => str ? str.trim().toLowerCase() : '';
+
+export const round = (num) => Math.round((parseFloat(num) || 0) * 100) / 100;

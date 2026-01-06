@@ -8,7 +8,7 @@ const LedgerView = ({
     viewAllTime, setViewAllTime, filterStartDate, setFilterStartDate, filterEndDate, setFilterEndDate,
     selectedMonth, setSelectedMonth, theme, searchTerm, setSearchTerm, showAdvancedFilters, setShowAdvancedFilters,
     sortBy, setSortBy, filterMinAmount, setFilterMinAmount, filterMaxAmount, setFilterMaxAmount,
-    filterCategory, setFilterCategory, categories, resetFilters, runExport, allTags, filterTag, setFilterTag,
+    filterCategory, setFilterCategory, filterAccount, setFilterAccount, accounts, categories, resetFilters, runExport, allTags, filterTag, setFilterTag,
     setEditingTransaction, setTransactionModalOpen, setEditingSubscription, setSubscriptionModalOpen, subscriptions, transactions
 }) => {
     const [suggestions, setSuggestions] = useState([]);
@@ -160,7 +160,7 @@ const LedgerView = ({
                 </div>
                 {showAdvancedFilters && (
                     <div className="pt-4 border-t-2 border-dashed space-y-4 animate-in slide-in-from-top-2 fade-in duration-200" style={{ borderColor: theme.borderColor }}>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
                             <div className="space-y-1">
                                 <div className="flex justify-between items-center h-5"><label className="text-xs font-bold uppercase opacity-60 ml-1">Date Range</label><button onClick={() => { setViewAllTime(true); setFilterStartDate(''); setFilterEndDate(''); }} className={`text-[10px] font-bold hover:underline ${viewAllTime ? 'text-emerald-600 underline' : 'text-emerald-600'}`}>All Time</button></div>
                                 <div className={`flex gap-2 items-center transition-opacity ${viewAllTime ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
@@ -170,6 +170,7 @@ const LedgerView = ({
                                 </div>
                             </div>
                             <div className="space-y-1"><div className="h-5 flex items-center"><label className="text-xs font-bold uppercase opacity-60 ml-1">Amount ($)</label></div><div className="flex gap-2 items-center"><input type="number" placeholder="Min" value={filterMinAmount} onChange={(e) => setFilterMinAmount(e.target.value)} className="w-full p-2 old-book-input rounded text-sm min-w-0" /><span className="opacity-50">-</span><input type="number" placeholder="Max" value={filterMaxAmount} onChange={(e) => setFilterMaxAmount(e.target.value)} className="w-full p-2 old-book-input rounded text-sm min-w-0" /></div></div>
+                            <div className="space-y-1"><div className="h-5 flex items-center"><label className="text-xs font-bold uppercase opacity-60 ml-1">Account</label></div><select value={filterAccount} onChange={(e) => setFilterAccount(e.target.value)} className="w-full p-2 old-book-input rounded text-sm"><option value="all">All Accounts</option>{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
                             <div className="space-y-1"><div className="h-5 flex items-center"><label className="text-xs font-bold uppercase opacity-60 ml-1">Category</label></div><select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="w-full p-2 old-book-input rounded text-sm"><option value="all">All Categories</option>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
                             <div className="flex items-end gap-2"><button onClick={() => { resetFilters(); setViewAllTime(false); }} className="flex-1 p-2 rounded border-2 border-dashed hover:bg-red-50 hover:border-red-200 hover:text-red-600 transition-colors text-sm font-bold opacity-70 hover:opacity-100" style={{ borderColor: theme.borderColor }}>Clear All</button><button onClick={runExport} className="flex-1 p-2 rounded border-2 hover:bg-black/5 transition-colors text-sm font-bold flex items-center justify-center gap-2" style={{ borderColor: theme.borderColor }}><Download size={14} /> CSV</button></div>
                         </div>
@@ -238,7 +239,19 @@ const LedgerView = ({
                             {paginatedTransactions.length === 0 ? (<tr><td colSpan="4" className="p-8 text-center opacity-50 italic">No parchments found matching your query.</td></tr>) : (
                                 paginatedTransactions.map(t => (
                                     <tr key={t.id} className="hover:bg-black/5 transition-colors group cursor-pointer" onClick={() => { setEditingTransaction(t); setTransactionModalOpen(true); }}>
-                                        <td className="p-1 sm:p-4 font-mono text-[10px] sm:text-sm whitespace-nowrap opacity-80">{t.date.substring(0, 10)}</td>
+                                        <td className="p-1 sm:p-4 text-[10px] sm:text-sm opacity-80 align-middle">
+                                            <div className="flex flex-col sm:hidden leading-tight">
+                                                <span className="font-bold">
+                                                    {new Date(t.date).toLocaleString('default', { month: 'short' })} {t.date.substring(8, 10)}
+                                                </span>
+                                                <span className="opacity-60 text-[9px] font-mono">
+                                                    {t.date.substring(0, 4)}
+                                                </span>
+                                            </div>
+                                            <div className="hidden sm:block font-mono whitespace-nowrap">
+                                                {t.date.substring(0, 10)}
+                                            </div>
+                                        </td>
                                         <td className="p-1 sm:p-4 text-[10px] sm:text-sm max-w-[120px] sm:max-w-none whitespace-normal break-words"><div className="font-bold flex items-center gap-2 flex-wrap">{t.description} {t.isRecurring && <span title="Recurring Subscription" className="text-blue-500 opacity-70"><Repeat size={14} /></span>}</div>{t.tags && t.tags.length > 0 && <div className="flex flex-wrap gap-1 mt-1">{t.tags.map(tag => <span key={tag} className="text-[9px] sm:text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-sm border opacity-60 whitespace-nowrap" style={{ borderColor: theme.textMuted }}>#{tag}</span>)}</div>}</td>
                                         <td className="p-1 sm:p-4 text-[10px] sm:text-sm">
                                             {(() => {
