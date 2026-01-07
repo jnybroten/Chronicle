@@ -4,7 +4,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import firebase, { auth, db, googleProvider } from './lib/firebase';
 import AccountHistoryChart from './components/AccountHistoryChart';
 import HistoryManagerModal from './components/HistoryManagerModal';
-import { LayoutDashboard, Target, ArrowRightLeft, Bank, Settings, Moon, ChevronRightIcon, User, LogOut, Trash2, Plus, X, Menu, Sparkles, Mic, LongFeather, Search, Filter, Download, Repeat, Edit2, ChevronLeft, ArrowRight, ScrollText, ChevronDown } from './components/Icons';
+import { LayoutDashboard, Target, ArrowRightLeft, Bank, Settings, Moon, ChevronRightIcon, User, LogOut, Trash2, Plus, X, Menu, Sparkles, Mic, LongFeather, Search, Filter, Download, Repeat, Edit2, ChevronLeft, ArrowRight, ScrollText, ChevronDown, Check } from './components/Icons';
 import { Modal, SidebarItem, Card, MonthSelector } from './components/UIComponents';
 import HybridTagSelector from './components/HybridTagSelector';
 import DashboardView from './views/DashboardView';
@@ -17,14 +17,131 @@ import { DEFAULT_CATEGORIES, THEMES, formatCurrency, norm, addToQueue, getQueue,
 import customQuill from './assets/custom_quill.png';
 import sealImg from './assets/seal.png';
 
+const VoiceCapture = () => {
+    const [isRecording, setIsRecording] = useState(false);
+    const [transcript, setTranscript] = useState('');
+    const [status, setStatus] = useState('Idle');
+    const [savedCount, setSavedCount] = useState(0);
+
+    useEffect(() => {
+        if (!('webkitSpeechRecognition' in window)) {
+            setStatus('Speech recognition not supported.');
+            return;
+        }
+        startListening();
+    }, []);
+
+    const startListening = () => {
+        const recognition = new window.webkitSpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = 'en-US';
+
+        recognition.onstart = () => {
+            setStatus('Listening...');
+            setIsRecording(true);
+        };
+
+        recognition.onresult = (event) => {
+            const text = event.results[0][0].transcript;
+            setTranscript(prev => prev + (prev ? ' ' : '') + text);
+            setStatus('Paused');
+            setIsRecording(false);
+        };
+
+        recognition.onerror = (event) => {
+            console.warn(event.error);
+            setIsRecording(false);
+            setStatus('Paused');
+        };
+
+        recognition.onend = () => {
+            setIsRecording(false);
+            if (status === 'Listening...') setStatus('Paused');
+        };
+
+        recognition.start();
+    };
+
+    const handleSave = () => {
+        if (!transcript.trim()) return;
+        const inbox = JSON.parse(localStorage.getItem('chronicle_inbox') || '[]');
+        inbox.push({ text: transcript, date: new Date().toISOString(), id: Date.now() });
+        localStorage.setItem('chronicle_inbox', JSON.stringify(inbox));
+
+        setSavedCount(c => c + 1);
+        setTranscript('');
+        setStatus('Saved!');
+        // Optional: Auto-restart listening after short delay?
+        // setTimeout(startListening, 1000); 
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black text-white flex flex-col items-center justify-center p-6 z-50">
+            <h2 className="text-2xl font-bold mb-6 font-cinzel">Quick Capture</h2>
+
+            <div className="relative mb-8 group cursor-pointer" onClick={isRecording ? () => { } : startListening}>
+                <div className={`w-24 h-24 rounded-full flex items-center justify-center transition-all ${isRecording ? 'bg-red-600 animate-pulse' : 'bg-gray-800 hover:bg-gray-700'}`}>
+                    <Mic size={40} className={isRecording ? 'text-white' : 'text-gray-400'} />
+                </div>
+                {!isRecording && <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 text-sm text-gray-400 whitespace-nowrap">Tap to Speak</div>}
+            </div>
+
+            <textarea
+                value={transcript}
+                onChange={(e) => setTranscript(e.target.value)}
+                placeholder="Speak or type your transaction..."
+                className="w-full max-w-md bg-white/10 p-4 rounded-lg text-lg mb-4 h-32 outline-none focus:ring-2 ring-emerald-500/50"
+            />
+
+            <div className="flex gap-4 w-full max-w-md">
+                <button
+                    onClick={handleSave}
+                    disabled={!transcript.trim()}
+                    className="flex-1 bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-500 text-white p-4 rounded-lg font-bold flex flex-col items-center gap-1"
+                >
+                    <Check size={24} />
+                    <span>Save Item</span>
+                </button>
+                <button
+                    onClick={() => setTranscript('')}
+                    disabled={!transcript}
+                    className="p-4 rounded-lg bg-white/10 hover:bg-white/20 text-white"
+                >
+                    <Trash2 size={24} />
+                </button>
+            </div>
+
+            {savedCount > 0 && (
+                <div className="mt-4 text-emerald-400 font-bold animate-in fade-in slide-in-from-bottom-2">
+                    {savedCount} item{savedCount !== 1 ? 's' : ''} saved to Inbox
+                </div>
+            )}
+
+            <button
+                onClick={() => window.location.href = '/'}
+                className="mt-12 text-sm text-gray-400 hover:text-white border-b border-transparent hover:border-white transition-all"
+            >
+                Return to Dashboard
+            </button>
+        </div>
+    );
+};
+
 const ChronicleApp = () => {
     const [user, setUser] = useState(null);
     const navigate = useNavigate();
     const location = useLocation();
+
+    const searchParams = new URLSearchParams(location.search);
+    const isVoiceMode = searchParams.get('mode') === 'voice';
+
     const currentView = useMemo(() => {
         const path = location.pathname.substring(1);
         return path || 'dashboard';
     }, [location]);
+
+
 
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -1561,6 +1678,10 @@ const ChronicleApp = () => {
         showToast('success', 'Repayment Recorded');
     };
 
+    if (isVoiceMode) {
+        return <VoiceCapture />;
+    }
+
     return (
         <>
             <div className="flex flex-col md:flex-row h-dvh overflow-hidden">
@@ -1670,6 +1791,7 @@ const ChronicleApp = () => {
                                     shiftCashFlow={shiftCashFlow}
                                     transactions={transactions}
                                     onResolveDebt={handleResolveDebt}
+                                    onProcessScribe={handleScribeRequest}
                                 />} />
                                 <Route path="/budget" element={<BudgetView
                                     monthlyBudgets={monthlyBudgets}
@@ -1709,6 +1831,7 @@ const ChronicleApp = () => {
                                     setShowAdvancedFilters={setShowAdvancedFilters}
                                     sortBy={sortBy}
                                     setSortBy={setSortBy}
+                                    onProcessScribe={handleScribeRequest}
                                     filterMinAmount={filterMinAmount}
                                     setFilterMinAmount={setFilterMinAmount}
                                     filterMaxAmount={filterMaxAmount}
@@ -2610,17 +2733,29 @@ const ChronicleApp = () => {
                             </div>
                         )}
 
-                        <button
-                            onClick={() => setCreateMenuOpen(!createMenuOpen)}
-                            className={`pointer-events-auto old-book-btn w-16 h-16 rounded-2xl flex items-center justify-center shadow-2xl hover:scale-110 hover:brightness-110 transition-all active:scale-95 overflow-hidden border-2 relative z-[60] ${createMenuOpen ? 'rotate-12' : 'rotate-0'}`}
-                            style={{ borderColor: theme.secondary }}
-                        >
-                            {quillUrl ? (
-                                <img src={quillUrl} alt="Quill" className="w-full h-full object-cover" />
-                            ) : (
-                                <LongFeather size={32} />
+                        <div className="flex items-center gap-4 pointer-events-auto">
+                            {createMenuOpen && (
+                                <button
+                                    onClick={() => { navigate('/?mode=voice'); setTimeout(() => setCreateMenuOpen(false), 300); }}
+                                    className="pointer-events-auto w-12 h-12 rounded-full shadow-xl flex items-center justify-center bg-red-700 text-white hover:bg-red-600 hover:scale-110 transition-all animate-in slide-in-from-right-8 fade-in duration-300 relative z-[60]"
+                                    title="Voice Capture"
+                                >
+                                    <Mic size={24} />
+                                </button>
                             )}
-                        </button>
+
+                            <button
+                                onClick={() => setCreateMenuOpen(!createMenuOpen)}
+                                className={`pointer-events-auto old-book-btn w-16 h-16 rounded-2xl flex items-center justify-center shadow-2xl hover:scale-110 hover:brightness-110 transition-all active:scale-95 overflow-hidden border-2 relative z-[60] ${createMenuOpen ? 'rotate-12' : 'rotate-0'}`}
+                                style={{ borderColor: theme.secondary }}
+                            >
+                                {quillUrl ? (
+                                    <img src={quillUrl} alt="Quill" className="w-full h-full object-cover" />
+                                ) : (
+                                    <LongFeather size={32} />
+                                )}
+                            </button>
+                        </div>
                     </div>
 
                     {permissionError && <div className="fixed inset-0 bg-red-900/90 z-[9999] flex items-center justify-center text-white p-8"><div className="max-w-lg text-center"><h1 className="text-3xl font-bold mb-4">Database Access Blocked</h1><p>Copy security rules to Firebase Console.</p></div></div>}
