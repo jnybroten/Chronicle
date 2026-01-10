@@ -3,14 +3,16 @@ import {
     LayoutDashboard, CreditCard, Wallet, ArrowRightLeft, Sparkles, Repeat, Calendar, Settings,
     TrendingUp, TrendingDown, Search, Plus, X, Menu, ChevronRight, ChevronLeft, ChevronDown,
     Upload, BarChart3, Target, Edit2, Trash2, Save, Check, FileText, Tag, Filter, XCircle,
-    Download, Database, Image as ImageIcon, Sun, Moon, Code, MessageSquare, User, LogOut, Mic, ArrowRight, Scroll, ArrowUpDown, AlertTriangle, RefreshCw
+    Download, Database, Image as ImageIcon, Sun, Moon, Code, MessageSquare, User, LogOut, Mic, ArrowRight, Scroll, ArrowUpDown, AlertTriangle, RefreshCw,
+    LogIn, Mail, Lock, AlertCircle
 } from 'lucide-react';
 
 export {
     LayoutDashboard, CreditCard, Wallet, ArrowRightLeft, Sparkles, Repeat, Calendar, Settings,
     TrendingUp, TrendingDown, Search, Plus, X, Menu, ChevronRight, ChevronLeft, ChevronDown,
     Upload, BarChart3, Target, Edit2, Trash2, Save, Check, FileText, Tag, Filter, XCircle,
-    Download, Database, ImageIcon, Sun, Moon, Code, MessageSquare, User, LogOut, Mic, ArrowRight, Scroll, Scroll as ScrollText, ArrowUpDown, AlertTriangle, RefreshCw
+    Download, Database, ImageIcon, Sun, Moon, Code, MessageSquare, User, LogOut, Mic, ArrowRight, Scroll, Scroll as ScrollText, ArrowUpDown, AlertTriangle, RefreshCw,
+    LogIn, Mail, Lock, AlertCircle
 };
 
 export const ChevronRightIcon = ChevronRight;

@@ -1,12 +1,13 @@
 ﻿import React, { useState, useEffect, useMemo } from 'react';
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+
 import firebase, { auth, db, googleProvider } from './lib/firebase';
 import AccountHistoryChart from './components/AccountHistoryChart';
 import HistoryManagerModal from './components/HistoryManagerModal';
 import { LayoutDashboard, Target, ArrowRightLeft, Bank, Settings, Moon, ChevronRightIcon, User, LogOut, Trash2, Plus, X, Menu, Sparkles, Mic, LongFeather, Search, Filter, Download, Repeat, Edit2, ChevronLeft, ArrowRight, ScrollText, ChevronDown, Check } from './components/Icons';
 import { Modal, SidebarItem, Card, MonthSelector } from './components/UIComponents';
 import HybridTagSelector from './components/HybridTagSelector';
+import LoginView from './views/LoginView';
 import DashboardView from './views/DashboardView';
 import BudgetView from './views/BudgetView';
 import LedgerView from './views/LedgerView';
@@ -130,6 +131,7 @@ const VoiceCapture = () => {
 
 const ChronicleApp = () => {
     const [user, setUser] = useState(null);
+    const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -181,7 +183,7 @@ const ChronicleApp = () => {
     // Derived state
     const transactions = useMemo(() => rawTransactions.map(t => ({ ...t, amount: parseFloat(t.amount) })), [rawTransactions]);
 
-    const [appId, setAppId] = useState(localStorage.getItem('chronicle_app_id') || 'chronicle_v1');
+    const [appId, setAppId] = useState('personal-chronicle');
     const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
     const [selectedTags, setSelectedTags] = useState([]);
 
@@ -224,7 +226,8 @@ const ChronicleApp = () => {
     const [scribePreview, setScribePreview] = useState(null);
     const [isListening, setIsListening] = useState(false);
     const [isProcessingScribe, setIsProcessingScribe] = useState(false);
-    const [geminiApiKey, setGeminiApiKey] = useState('');
+    // const [geminiApiKey, setGeminiApiKey] = useState(''); // Removed state
+
     const [testScribeResult, setTestScribeResult] = useState(null);
 
     const [notification, setNotification] = useState(null);
@@ -251,10 +254,10 @@ const ChronicleApp = () => {
 
     useEffect(() => {
         auth.onAuthStateChanged(async (u) => {
-            if (u) { setUser(u); } else { await auth.signInAnonymously(); }
+            setUser(u);
+            setLoading(false);
         });
-        const storedKey = localStorage.getItem('chronicle_gemini_key');
-        if (storedKey) setGeminiApiKey(storedKey);
+
 
         const handleOnline = async () => {
             setIsOnline(true);
@@ -279,12 +282,7 @@ const ChronicleApp = () => {
         };
     }, []);
 
-    useEffect(() => {
-        const unsubscribe = auth.onAuthStateChanged((u) => {
-            setUser(u);
-        });
-        return () => unsubscribe();
-    }, []);
+
 
     useEffect(() => {
         if (!user) return;
@@ -997,6 +995,10 @@ const ChronicleApp = () => {
         } catch (e) { showToast('error', 'Scribe Failed: ' + e.message); }
     };
 
+
+
+    // Removed client-side model fetch
+
     const toggleListening = () => {
         if (isListening) {
             setIsListening(false);
@@ -1029,29 +1031,7 @@ const ChronicleApp = () => {
         recognition.start();
     };
 
-    const getWorkingModel = async (key) => {
-        const saved = localStorage.getItem('chronicle_gemini_model');
-        if (saved) return saved;
 
-        try {
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
-            const data = await response.json();
-            if (!data.models) throw new Error('No models found');
-
-            const generateModels = data.models
-                .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
-                .map(m => m.name.replace('models/', ''));
-
-            const best = generateModels.find(m => m.includes('flash')) || generateModels[0];
-            if (best) {
-                localStorage.setItem('chronicle_gemini_model', best);
-                return best;
-            }
-        } catch (e) {
-            console.error("Model fetch failed", e);
-        }
-        return "gemini-1.5-flash"; // Fallback
-    };
 
     const fetchExchangeRate = async () => {
         try {
@@ -1066,7 +1046,7 @@ const ChronicleApp = () => {
 
     const handleScribeRequest = async (inputText = null, skipQueue = false) => {
         const textToProcess = inputText || scribeInput;
-        if (!geminiApiKey) { showToast('error', 'Please enter a Gemini API Key to use the Scribe.'); return; }
+        // API Key check removed - handled by serverless function
         if (typeof textToProcess !== 'string' || !textToProcess.trim()) return;
 
         if (!isOnline && !skipQueue) {
@@ -1079,10 +1059,6 @@ const ChronicleApp = () => {
 
         setIsProcessingScribe(true);
         try {
-            const modelName = await getWorkingModel(geminiApiKey.trim());
-            const ai = new GoogleGenerativeAI(geminiApiKey.trim());
-            const model = ai.getGenerativeModel({ model: modelName });
-
             const eurRate = await fetchExchangeRate();
 
             const systemPrompt = `
@@ -1127,8 +1103,21 @@ const ChronicleApp = () => {
                 - Always include at least one relevant tag if possible.
             `;
 
-            const result = await model.generateContent(systemPrompt + "\nUser Input: " + textToProcess);
-            const responseText = result.response.text();
+            // Call Netlify Function
+            const response = await fetch('/.netlify/functions/scribe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: systemPrompt + "\nUser Input: " + textToProcess })
+            });
+
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.error || 'Netlify function failed');
+            }
+
+            const data = await response.json();
+            const responseText = data.text;
+
             const clean = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
 
             let rawData;
@@ -1201,54 +1190,7 @@ const ChronicleApp = () => {
 
 
 
-    const handleTestScribe = async () => {
-        if (!geminiApiKey) { setTestScribeResult({ success: false, message: 'No API Key provided' }); return; }
-        setTestScribeResult({ success: false, message: 'Checking available models...' });
 
-        try {
-            // Direct REST call to see what models are actually available for this key
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiApiKey.trim()}`);
-            const data = await response.json();
-
-            if (!response.ok) {
-                setTestScribeResult({ success: false, message: `API Error: ${data.error?.message || response.statusText}` });
-                return;
-            }
-
-            if (!data.models || data.models.length === 0) {
-                setTestScribeResult({ success: false, message: 'No models found for this API Key. Please ensure the "Generative Language API" is enabled in your Google Cloud Console.' });
-                return;
-            }
-
-            // Filter for generateContent supported models
-            const generateModels = data.models
-                .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'))
-                .map(m => m.name.replace('models/', ''));
-
-            if (generateModels.length === 0) {
-                setTestScribeResult({ success: false, message: 'No models support content generation.' });
-                return;
-            }
-
-            // Try the first available model
-            const bestModel = generateModels.find(m => m.includes('flash')) || generateModels[0];
-
-            // Save the working model
-            localStorage.setItem('chronicle_gemini_model', bestModel);
-
-            setTestScribeResult({ success: false, message: `Found models: ${generateModels.join(', ')}. Testing ${bestModel}...` });
-
-            const genAI = new GoogleGenerativeAI(geminiApiKey.trim());
-            const model = genAI.getGenerativeModel({ model: bestModel });
-            const result = await model.generateContent("Hello");
-            const text = result.response.text();
-
-            setTestScribeResult({ success: true, message: `Success! Model '${bestModel}' works. Response: ${text.slice(0, 20)}...` });
-
-        } catch (e) {
-            setTestScribeResult({ success: false, message: 'Check Failed: ' + e.message });
-        }
-    };
 
     const handleAccountSave = async (e) => {
         e.preventDefault();
@@ -1678,6 +1620,18 @@ const ChronicleApp = () => {
         showToast('success', 'Repayment Recorded');
     };
 
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-screen bg-gray-50 text-emerald-800">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-800"></div>
+            </div>
+        );
+    }
+
+    if (!user) {
+        return <LoginView theme={theme} />;
+    }
+
     if (isVoiceMode) {
         return <VoiceCapture />;
     }
@@ -1936,73 +1890,19 @@ const ChronicleApp = () => {
 
                                                     {showAdvancedSettings && (
                                                         <div className="mt-4 space-y-6 animate-in slide-in-from-top-2 fade-in duration-200">
-                                                            <div>
-                                                                <p className="text-sm font-bold opacity-70 mb-2">Gemini API Key (for Scribe)</p>
-                                                                <input
-                                                                    type="password"
-                                                                    placeholder="Paste API Key here..."
-                                                                    className="w-full p-2 border rounded bg-white"
-                                                                    value={geminiApiKey}
-                                                                    onChange={(e) => {
-                                                                        const key = e.target.value;
-                                                                        setGeminiApiKey(key);
-                                                                        localStorage.setItem('chronicle_gemini_key', key);
-                                                                    }}
-                                                                />
-                                                                {geminiApiKey && (
-                                                                    <button
-                                                                        onClick={() => {
-                                                                            setGeminiApiKey('');
-                                                                            localStorage.removeItem('chronicle_gemini_key');
-                                                                        }}
-                                                                        className="mt-2 text-xs text-red-500 hover:underline"
-                                                                    >
-                                                                        Clear Key
-                                                                    </button>
-                                                                )}
-                                                                <a href="https://aistudio.google.com/app/apikey" target="_blank" className="underline mt-1 block text-xs">Get a key here</a>
-                                                            </div>
+
 
                                                             <div className="p-4 bg-gray-100 rounded border">
                                                                 <p className="font-bold text-sm mb-2 uppercase opacity-70">Advanced Debugging</p>
 
-                                                                <div className="mb-4">
-                                                                    <label className="block text-xs font-bold mb-1">Data Source (App ID)</label>
-                                                                    <select
-                                                                        value={appId}
-                                                                        onChange={(e) => {
-                                                                            const newId = e.target.value;
-                                                                            setAppId(newId);
-                                                                            localStorage.setItem('chronicle_app_id', newId);
-                                                                            window.location.reload(); // Reload to ensure clean state
-                                                                        }}
-                                                                        className="w-full p-2 border rounded text-sm"
-                                                                    >
-                                                                        <option value="chronicle_v1">chronicle_v1 (Original)</option>
-                                                                        <option value="personal-chronicle">personal-chronicle (New)</option>
-                                                                    </select>
-                                                                    <p className="text-[10px] opacity-60 mt-1">Try switching this if your data is missing.</p>
-                                                                </div>
+
 
                                                                 <div className="mb-4">
                                                                     <label className="block text-xs font-bold mb-1">User ID</label>
                                                                     <code className="block w-full p-2 bg-white border rounded text-xs overflow-x-auto">{user?.uid}</code>
                                                                 </div>
 
-                                                                <div>
-                                                                    <label className="block text-xs font-bold mb-1">Scribe Connection</label>
-                                                                    <button
-                                                                        onClick={handleTestScribe}
-                                                                        className="px-3 py-1 bg-white border rounded text-xs font-bold hover:bg-gray-50"
-                                                                    >
-                                                                        Test Connection
-                                                                    </button>
-                                                                    {testScribeResult && (
-                                                                        <div className={`mt-2 p-2 rounded text-xs border ${testScribeResult.success ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
-                                                                            {testScribeResult.message}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
+
                                                             </div>
                                                         </div>
                                                     )}

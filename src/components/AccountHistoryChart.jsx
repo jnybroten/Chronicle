@@ -197,7 +197,7 @@ const AccountHistoryChart = ({ transactions = [], transfers = [], accountId, the
                             tick={{ fontSize: 10, fill: theme.textMuted }}
                             tickLine={false}
                             axisLine={false}
-                            tickFormatter={(val) => `$${val}`}
+                            tickFormatter={(val) => formatCurrency(val)}
                             width={50}
                         />
                         <Tooltip

@@ -169,27 +169,29 @@ const DashboardView = ({
             </div>
             <div className="grid grid-cols-1 gap-6">
                 <Card title="Monthly Spending" subTitle="By Category" theme={theme}>
-                    <div className="h-96 w-full">
-                        <ResponsiveContainer>
-                            <PieChart>
-                                <Pie
-                                    data={categoryPieData}
-                                    innerRadius={chartSize.inner}
-                                    outerRadius={chartSize.outer}
-                                    paddingAngle={2}
-                                    dataKey="value"
-                                    label={renderCustomizedLabel}
-                                    labelLine={false}
-                                >
-                                    {categoryPieData.map((entry, index) => <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[entry.name] || theme.textMuted} />)}
-                                </Pie>
-                                <Tooltip formatter={(value, name) => {
-                                    const total = categoryPieData.reduce((sum, item) => sum + item.value, 0);
-                                    const percent = total > 0 ? ((value / total) * 100).toFixed(0) : 0;
-                                    return [`${formatCurrency(value)} (${percent}%)`, name];
-                                }} />
-                            </PieChart>
-                        </ResponsiveContainer>
+                    <div className="h-96 w-full overflow-x-auto pb-2">
+                        <div className="min-w-[500px] h-full">
+                            <ResponsiveContainer>
+                                <PieChart>
+                                    <Pie
+                                        data={categoryPieData}
+                                        innerRadius={chartSize.inner}
+                                        outerRadius={chartSize.outer}
+                                        paddingAngle={2}
+                                        dataKey="value"
+                                        label={renderCustomizedLabel}
+                                        labelLine={false}
+                                    >
+                                        {categoryPieData.map((entry, index) => <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[entry.name] || theme.textMuted} />)}
+                                    </Pie>
+                                    <Tooltip formatter={(value, name) => {
+                                        const total = categoryPieData.reduce((sum, item) => sum + item.value, 0);
+                                        const percent = total > 0 ? ((value / total) * 100).toFixed(0) : 0;
+                                        return [`${formatCurrency(value)} (${percent}%)`, name];
+                                    }} />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
                     </div>
                 </Card>
                 <Card className="relative" theme={theme}>
