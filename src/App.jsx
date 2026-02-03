@@ -5,7 +5,7 @@ import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-
 import firebase, { auth, db, googleProvider } from './lib/firebase';
 import AccountHistoryChart from './components/AccountHistoryChart';
 import HistoryManagerModal from './components/HistoryManagerModal';
-import { LayoutDashboard, Target, ArrowRightLeft, Bank, Settings, Moon, ChevronRightIcon, User, LogOut, Trash2, Plus, X, Menu, Sparkles, Mic, LongFeather, Search, Filter, Download, Repeat, Edit2, ChevronLeft, ArrowRight, ScrollText, ChevronDown, Check } from './components/Icons';
+import { LayoutDashboard, Target, ArrowRightLeft, Bank, Settings, Moon, ChevronRightIcon, User, LogOut, Trash2, Plus, X, Menu, Sparkles, Mic, LongFeather, Search, Filter, Download, Repeat, Edit2, ChevronLeft, ArrowRight, ScrollText, ChevronDown, Check, ImageIcon } from './components/Icons';
 import { Modal, SidebarItem, Card, MonthSelector } from './components/UIComponents';
 import HybridTagSelector from './components/HybridTagSelector';
 import LoginView from './views/LoginView';
@@ -224,6 +224,7 @@ const ChronicleApp = () => {
     const [editingBudget, setEditingBudget] = useState(null);
 
     const [scribeInput, setScribeInput] = useState('');
+    const [scribeImage, setScribeImage] = useState(null);
     const [scribePreview, setScribePreview] = useState(null);
     const [isListening, setIsListening] = useState(false);
     const [isProcessingScribe, setIsProcessingScribe] = useState(false);
@@ -266,7 +267,7 @@ const ChronicleApp = () => {
             const queue = await getQueue();
             if (queue.length > 0) {
                 for (let i = 0; i < queue.length; i++) {
-                    await handleScribeRequest(queue[i].text, true); // Pass true to skip queue check
+                    await handleScribeRequest(queue[i].text, true, queue[i].image); // Pass true to skip queue check
                     await removeFromQueue(i);
                 }
                 showToast('success', 'Offline Queue Processed');
@@ -911,7 +912,9 @@ const ChronicleApp = () => {
                     batch.set(ref, {
                         description: item.description || 'Imported Transaction',
                         amount, type, category: categoryId, date,
-                        tags: item.tags || [], isRecurring: !!item.isRecurring
+                        tags: item.tags || [], isRecurring: !!item.isRecurring,
+                        // If we have an image associated with this "session", we might want to save it?
+                        // For now, Scribe is stateless per request, so complex attachment logic is skipped unless requested.
                     });
                     count++;
                 } else if (act === 'add_account') {
@@ -1011,7 +1014,7 @@ const ChronicleApp = () => {
                 await getSubColl(user.uid, 'history').add({ date: new Date().toISOString(), totalAssets, totalLiabilities, netWorth: totalAssets - totalLiabilities, accountBalances });
             }
             showToast('success', `Scribe wrote ${count} entries.`);
-            setScribeModalOpen(false); setScribeInput('');
+            setScribeModalOpen(false); setScribeInput(''); setScribeImage(null);
         } catch (e) { showToast('error', 'Scribe Failed: ' + e.message); }
     };
 
@@ -1064,14 +1067,16 @@ const ChronicleApp = () => {
         }
     };
 
-    const handleScribeRequest = async (inputText = null, skipQueue = false) => {
+    const handleScribeRequest = async (inputText = null, skipQueue = false, inputImage = null) => {
         const textToProcess = inputText || scribeInput;
+        const imageToProcess = inputImage || scribeImage; // Use arg or state
         // API Key check removed - handled by serverless function
-        if (typeof textToProcess !== 'string' || !textToProcess.trim()) return;
+        if ((typeof textToProcess !== 'string' || !textToProcess.trim()) && !imageToProcess) return; // Allow image-only if we supported it, but text is usually key. let's assume text is optional if image exists? actually textToProcess might be empty string.
 
         if (!isOnline && !skipQueue) {
-            await addToQueue(textToProcess);
+            await addToQueue(textToProcess, imageToProcess);
             setScribeInput('');
+            setScribeImage(null);
             setScribeModalOpen(false);
             showToast('success', 'Offline: Request Queued');
             return;
@@ -1121,6 +1126,13 @@ const ChronicleApp = () => {
                 - You MUST accurately and consistently tag transactions. Tags are crucial for the user's organization.
                 - Infer tags based on the description and category (e.g., "groceries" -> ["food", "groceries"], "netflix" -> ["subscription", "entertainment"]).
                 - Always include at least one relevant tag if possible.
+                
+                IMAGE HANDLING RULES:
+                - If an image is provided, analyze it visually.
+                - If it is a RECEIPT: Extract the total amount, merchant name, and date. Create a transaction for the total. If you can identify specific items, you may create multiple split transactions, but usually one total is preferred unless specified.
+                - If it is a BANK SCREENSHOT: Extract the account balance if visible (use "update_account_balance") and any listed recent transactions.
+                - If it is a GENERIC OBJECT: Estimate the value or create a transaction description based on what it is (e.g., "Bought a new [Item]").
+                - If the text input contradicts the image, prioritize the text input (as it may be a correction).
             `;
 
             // Call Netlify Function (PROD) or Direct Client (DEV)
@@ -1133,7 +1145,17 @@ const ChronicleApp = () => {
                 const genAI = new GoogleGenerativeAI(geminiApiKey);
                 const model = genAI.getGenerativeModel({ model: "models/gemini-2.5-flash" });
 
-                const result = await model.generateContent(systemPrompt + "\nUser Input: " + textToProcess);
+                let promptParts = [systemPrompt + "\nUser Input: " + textToProcess];
+                if (imageToProcess) {
+                    promptParts.push({
+                        inlineData: {
+                            data: imageToProcess.split(',')[1],
+                            mimeType: imageToProcess.substring(imageToProcess.indexOf(':') + 1, imageToProcess.indexOf(';'))
+                        }
+                    });
+                }
+
+                const result = await model.generateContent(promptParts);
                 const response = await result.response;
                 const text = response.text();
                 clean = text.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -1142,7 +1164,10 @@ const ChronicleApp = () => {
                 const response = await fetch('/.netlify/functions/scribe', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: systemPrompt + "\nUser Input: " + textToProcess })
+                    body: JSON.stringify({
+                        message: systemPrompt + "\nUser Input: " + textToProcess,
+                        image: imageToProcess
+                    })
                 });
 
                 if (!response.ok) {
@@ -1188,7 +1213,9 @@ const ChronicleApp = () => {
                     });
                     setTransactionModalOpen(true);
                     setScribeModalOpen(false);
+                    setScribeModalOpen(false);
                     setScribeInput('');
+                    setScribeImage(null);
                     setIsProcessingScribe(false);
                     return;
                 }
@@ -1207,7 +1234,9 @@ const ChronicleApp = () => {
                     });
                     setTransactionModalOpen(true);
                     setScribeModalOpen(false);
+                    setScribeModalOpen(false);
                     setScribeInput('');
+                    setScribeImage(null);
                     setIsProcessingScribe(false);
                     return;
                 }
@@ -1368,6 +1397,15 @@ const ChronicleApp = () => {
                 setDoc(doc(getSubColl(user.uid, 'settings'), 'config'), { logoUrl: base64 }, { merge: true });
                 setLogoUrl(base64); showToast('success', 'Logo uploaded');
             };
+        };
+    };
+
+    const handleScribeImageUpload = (e) => {
+        const file = e.target.files[0]; if (!file) return;
+        const reader = new FileReader(); reader.readAsDataURL(file);
+        reader.onload = (evt) => {
+            // Optional: Resize logic here if we worry about payload size
+            setScribeImage(evt.target.result);
         };
     };
 
@@ -2057,7 +2095,7 @@ const ChronicleApp = () => {
 
                     {
                         scribeModalOpen && (
-                            <Modal title="The Scribe" onClose={() => { setScribeModalOpen(false); setScribePreview(null); }} theme={theme}>
+                            <Modal title="The Scribe" onClose={() => { setScribeModalOpen(false); setScribePreview(null); setScribeImage(null); }} theme={theme}>
                                 <div className="space-y-4">
                                     <div className="flex items-center gap-2 text-sm opacity-70 italic border-b pb-2" style={{ borderColor: theme.borderColor }}>
                                         <Sparkles size={16} />
@@ -2068,16 +2106,24 @@ const ChronicleApp = () => {
                                         <>
                                             <div className="relative">
                                                 <textarea
-                                                    className="w-full h-40 p-4 font-serif text-lg rounded border-2 resize-none outline-none"
+                                                    className="w-full h-40 p-4 font-serif text-lg rounded border-2 resize-none outline-none pb-12"
                                                     style={{ backgroundColor: theme.bg, color: theme.text, borderColor: theme.borderColor }}
                                                     value={scribeInput}
                                                     onChange={(e) => setScribeInput(e.target.value)}
                                                     placeholder="e.g. I spent 40 dollars on groceries today..."
                                                 ></textarea>
-                                                <div className="absolute bottom-2 right-2">
+
+                                                <div className="absolute bottom-4 right-4 flex flex-col gap-3 z-50">
+                                                    <div className="relative group">
+                                                        <label className="p-3 rounded-full cursor-pointer bg-white text-black shadow-lg hover:bg-gray-100 transition-all flex items-center justify-center border border-gray-200" title="Upload Image">
+                                                            <ImageIcon size={20} />
+                                                            <input type="file" accept="image/*" className="hidden" onChange={handleScribeImageUpload} />
+                                                        </label>
+                                                    </div>
+
                                                     <button
                                                         onClick={toggleListening}
-                                                        className={`p-3 rounded-full shadow-lg transition-all ${isListening ? 'bg-red-600 text-white mic-active' : 'bg-black/10 hover:bg-black/20 text-current'}`}
+                                                        className={`p-3 rounded-full shadow-lg transition-all ${isListening ? 'bg-red-600 text-white mic-active' : 'bg-black/10 hover:bg-black/20 text-current backdrop-blur-md bg-white/80'}`}
                                                         title="Toggle Voice Input"
                                                     >
                                                         <Mic size={20} />

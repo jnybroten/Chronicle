@@ -1,7 +1,7 @@
 import { get, set, update } from 'idb-keyval';
 
-export const addToQueue = async (text) => {
-    await update('scribe_queue', (val) => (val || []).concat({ text, date: new Date().toISOString() }));
+export const addToQueue = async (text, image = null) => {
+    await update('scribe_queue', (val) => (val || []).concat({ text, image, date: new Date().toISOString() }));
 };
 
 export const getQueue = async () => {
