@@ -4,7 +4,7 @@ import { formatCurrency, round } from '../utils/helpers';
 const BookshelfChart = ({ history, accounts, currentAssets, currentLiabilities, theme }) => {
     const today = new Date();
     const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const dStart = new Date(today.getFullYear(), today.getMonth() - 5, 1);
+    const dStart = new Date(today.getFullYear(), today.getMonth() - 11, 1);
     const dEnd = new Date(today.getFullYear(), today.getMonth(), 1);
 
     const [startMonth, setStartMonth] = useState(fmt(dStart));
@@ -85,17 +85,31 @@ const BookshelfChart = ({ history, accounts, currentAssets, currentLiabilities, 
                     else totalLiabilities += val;
                 });
                 const isPast = blockEnd < now;
-                const val = isPast ? totalAssets : (totalAssets - totalLiabilities);
+                let val = totalAssets - totalLiabilities;
+
+                // FORCE LIVE DATA FOR 'NOW'
+                // If this block represents the current live moment ("Now"), use the live metrics passed from props.
+                // This ensures the graph matches the "Total Net Worth" header exactly, even if history snapshots are stale or averaged.
+                if (label === 'Now' && currentAssets !== undefined && currentLiabilities !== undefined) {
+                    val = currentAssets - currentLiabilities;
+                }
+
                 group.points.push({ label, type, value: round(val) });
             };
 
-            if (midMonth <= now || (midMonth > now && isCurrentMonth)) {
-                processBlock(startOfMonth, midMonth, '14th', 'mid');
+            // ONE BLOCK PER MONTH
+            // The user requested a single data point recorded at the end of the month.
+            // For the current month, we treat "End" as "Now" to show live status.
+
+            const isFuture = endOfMonth > now;
+            const label = (isCurrentMonth) ? 'Now' : 'End';
+            const type = (isCurrentMonth) ? 'now' : 'end';
+
+            // Only show if we have reached the end of the month OR it is the current month
+            if (endOfMonth <= now || isCurrentMonth) {
+                processBlock(startOfMonth, endOfMonth, label, type);
             }
-            if (endOfMonth <= now || (endOfMonth > now && isCurrentMonth)) {
-                const isFuture = endOfMonth > now;
-                processBlock(startSecondHalf, endOfMonth, isFuture ? 'Now' : 'End', isFuture ? 'now' : 'end');
-            }
+
             if (group.points.length > 0) groups.push(group);
             current.setMonth(current.getMonth() + 1);
         }
@@ -127,9 +141,9 @@ const BookshelfChart = ({ history, accounts, currentAssets, currentLiabilities, 
                 {dataGroups.length === 0 ? (
                     <div className="w-full text-center pb-20 opacity-50 text-sm italic pt-32">Record more history to populate the library.</div>
                 ) : (
-                    <div className="flex items-end justify-center w-full h-full gap-2 overflow-x-auto scrollbar-hide relative z-20">
+                    <div className="flex items-end justify-center w-full h-full overflow-x-auto scrollbar-hide relative z-20">
                         {dataGroups.map((group, gIndex) => (
-                            <div key={gIndex} className="relative flex flex-col items-center justify-end h-full flex-1 min-w-[50px] max-w-[80px]">
+                            <div key={gIndex} className="relative flex flex-col items-center justify-end h-full flex-1 min-w-[30px] max-w-[50px]">
                                 <div className="flex items-end justify-center w-full flex-1 gap-0 mb-14 shadow-lg">
                                     {group.points.map((item, pIndex) => {
                                         const heightPercent = 20 + ((item.value - minVal) / range) * 80;
@@ -156,11 +170,12 @@ const BookshelfChart = ({ history, accounts, currentAssets, currentLiabilities, 
                                     })}
                                 </div>
                             </div>
-                        ))}
+                        ))
+                        }
                     </div>
                 )}
             </div>
-        </div>
+        </div >
     );
 };
 

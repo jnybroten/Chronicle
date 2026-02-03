@@ -3,7 +3,7 @@ import { Modal } from './UIComponents';
 import { Search, Save, Trash2, Edit2, X, AlertTriangle } from './Icons';
 import { formatCurrency } from '../utils/helpers';
 
-const HistoryManagerModal = ({ isOpen, onClose, history, accountId, theme, onUpdateHistory }) => {
+const HistoryManagerModal = ({ isOpen, onClose, history, accountId, theme, onUpdateHistory, onRecalculateAll }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [editingItem, setEditingItem] = useState(null);
     const [editValue, setEditValue] = useState('');
@@ -132,6 +132,24 @@ const HistoryManagerModal = ({ isOpen, onClose, history, accountId, theme, onUpd
                         <strong>Warning:</strong> Editing history logs will recalculate the Net Worth for that specific point in time but will not change your current actual account balance. Use this to fix incorrect historical spikes or drops.
                     </div>
                 </div>
+
+                {!accountId && (
+                    <div className="pt-4 border-t" style={{ borderColor: theme.borderColor }}>
+                        <h4 className="font-bold text-sm mb-2 font-cinzel">Data Repair Tools</h4>
+                        <button
+                            onClick={() => {
+                                if (window.confirm('This will recalculate Net Worth for ALL history points based on the stored account balances. This is destructive if your history data is partial. Continue?')) {
+                                    onUpdateHistory(null, null, null); // Hack to trigger re-render if needed? No, we use separate prop.
+                                    if (onRecalculateAll) onRecalculateAll();
+                                }
+                            }}
+                            className="bg-red-900/10 hover:bg-red-900/20 text-red-800 p-2 rounded text-xs font-bold w-full transition-colors flex items-center justify-center gap-2"
+                        >
+                            <AlertTriangle size={14} />
+                            Recalculate All Net Worth History
+                        </button>
+                    </div>
+                )}
             </div>
         </Modal>
     );

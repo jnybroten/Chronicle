@@ -4,7 +4,7 @@ import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-
 
 import firebase, { auth, db, googleProvider } from './lib/firebase';
 import AccountHistoryChart from './components/AccountHistoryChart';
-import HistoryManagerModal from './components/HistoryManagerModal';
+
 import { LayoutDashboard, Target, ArrowRightLeft, Bank, Settings, Moon, ChevronRightIcon, User, LogOut, Trash2, Plus, X, Menu, Sparkles, Mic, LongFeather, Search, Filter, Download, Repeat, Edit2, ChevronLeft, ArrowRight, ScrollText, ChevronDown, Check, ImageIcon } from './components/Icons';
 import { Modal, SidebarItem, Card, MonthSelector } from './components/UIComponents';
 import HybridTagSelector from './components/HybridTagSelector';
@@ -160,7 +160,7 @@ const ChronicleApp = () => {
     const [transfers, setTransfers] = useState([]);
     const [monthlyBudgets, setMonthlyBudgets] = useState({});
     const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
-    const [historyManagerOpen, setHistoryManagerOpen] = useState(false);
+
 
     const [transactionModalOpen, setTransactionModalOpen] = useState(false);
     const [accountModalOpen, setAccountModalOpen] = useState(false);
@@ -1472,6 +1472,67 @@ const ChronicleApp = () => {
             return false;
         }
     };
+
+    // --- AUTOMATED MONTHLY SNAPSHOTS CHECK ---
+    useEffect(() => {
+        if (user) {
+            checkMonthlySnapshots();
+        }
+    }, [user, history]); // Run when history loads
+
+    const checkMonthlySnapshots = async () => {
+        // Targets: End of Dec 2025, End of Jan 2026 (or generally last 3 months)
+        const now = new Date();
+        const targets = [];
+
+        // 1. End of previous month
+        targets.push(new Date(now.getFullYear(), now.getMonth(), 0));
+        // 2. End of month before that
+        targets.push(new Date(now.getFullYear(), now.getMonth() - 1, 0));
+        // 3. End of month before that (just in case)
+        targets.push(new Date(now.getFullYear(), now.getMonth() - 2, 0));
+
+        const batch = db.batch();
+        let added = 0;
+
+        for (const target of targets) {
+            // Check if we have data for this month/year combo
+            const alreadyExists = history.some(h => {
+                const d = new Date(h.date);
+                return d.getMonth() === target.getMonth() && d.getFullYear() === target.getFullYear();
+            });
+
+            if (!alreadyExists) {
+                // Create a snapshot for the END of that target month
+                const targetDate = new Date(target);
+                targetDate.setHours(23, 59, 59, 999);
+
+                // Use CURRENT balances (best effort backfill)
+                const currentAssets = accounts.filter(a => a.type === 'asset').reduce((sum, a) => sum + (parseFloat(a.balance) || 0), 0);
+                const currentLiabilities = accounts.filter(a => a.type === 'liability').reduce((sum, a) => sum + (parseFloat(a.balance) || 0), 0);
+                const accountBalances = {};
+                accounts.forEach(a => { accountBalances[a.id] = parseFloat(a.balance) || 0; });
+
+                const newRef = getSubColl(user.uid, 'history').doc();
+                batch.set(newRef, {
+                    date: targetDate.toISOString(),
+                    totalAssets: currentAssets,
+                    totalLiabilities: currentLiabilities,
+                    netWorth: currentAssets - currentLiabilities,
+                    accountBalances,
+                    isBackfilled: true,
+                    description: 'Auto-Backfill'
+                });
+                added++;
+            }
+        }
+
+        if (added > 0) {
+            await batch.commit();
+            console.log(`Backfilled ${added} missing history points.`);
+            showToast('success', `Recovered ${added} missing history points`);
+        }
+    };
     const resetFilters = () => { setFilterCategory('all'); setFilterAccount('all'); setFilterTag('all'); setFilterStartDate(''); setFilterEndDate(''); setFilterMinAmount(''); setFilterMaxAmount(''); setSearchTerm(''); };
     const runExport = () => {
         const rows = filteredTransactions.map(t => [t.date.substring(0, 10), `"${t.description}"`, t.type, t.category, t.amount.toFixed(2), `"${(t.tags || []).join(',')}"`]);
@@ -1533,43 +1594,9 @@ const ChronicleApp = () => {
         }
     };
 
-    const handleUpdateHistory = async (originalItem, accountId, newBalance) => {
-        if (!user || !appId) return;
-        try {
-            const docRef = getSubColl(user.uid, 'history').doc(originalItem.id);
-            const currentBalances = originalItem.accountBalances || {};
 
-            let updatedBalances = { ...currentBalances };
 
-            if (newBalance === null) {
-                // Delete logic
-                delete updatedBalances[accountId];
-            } else {
-                updatedBalances[accountId] = parseFloat(newBalance);
-            }
 
-            // Calculate new net worth (sum of all balances)
-            const newNetWorth = Object.values(updatedBalances).reduce((a, b) => a + (parseFloat(b) || 0), 0);
-
-            if (Object.keys(updatedBalances).length === 0) {
-                // If no accounts left in this history point, delete the doc
-                await docRef.delete();
-                setHistory(prev => prev.filter(h => h.id !== originalItem.id));
-                showToast('success', 'History point deleted');
-            } else {
-                const updateData = {
-                    accountBalances: updatedBalances,
-                    netWorth: newNetWorth
-                };
-                await docRef.update(updateData);
-                setHistory(prev => prev.map(h => h.id === originalItem.id ? { ...h, ...updateData } : h));
-                showToast('success', 'History updated');
-            }
-        } catch (error) {
-            console.error("Error updating history:", error);
-            showToast('error', 'Failed to update history');
-        }
-    };
 
 
 
@@ -1975,29 +2002,7 @@ const ChronicleApp = () => {
                                                                     <code className="block w-full p-2 bg-white border rounded text-xs overflow-x-auto">{user?.uid}</code>
                                                                 </div>
 
-                                                                <div className="mb-4">
-                                                                    <label className="block text-xs font-bold mb-1">Test Scribe Connection</label>
-                                                                    <div className="flex gap-2 mb-2">
-                                                                        <input
-                                                                            type="password"
-                                                                            placeholder="Enter Gemini API Key"
-                                                                            value={geminiApiKey}
-                                                                            onChange={(e) => setGeminiApiKey(e.target.value)}
-                                                                            className="flex-1 p-2 border rounded text-sm"
-                                                                        />
-                                                                        <button
-                                                                            onClick={handleTestScribe}
-                                                                            className="bg-amber-600 text-white px-3 py-1 rounded text-sm font-bold"
-                                                                        >
-                                                                            Test
-                                                                        </button>
-                                                                    </div>
-                                                                    {testScribeResult && (
-                                                                        <div className={`text-xs p-2 rounded ${testScribeResult.startsWith('Success') ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
-                                                                            {testScribeResult}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
+
 
 
                                                             </div>
@@ -2765,16 +2770,7 @@ const ChronicleApp = () => {
 
                     {permissionError && <div className="fixed inset-0 bg-red-900/90 z-[9999] flex items-center justify-center text-white p-8"><div className="max-w-lg text-center"><h1 className="text-3xl font-bold mb-4">Database Access Blocked</h1><p>Copy security rules to Firebase Console.</p></div></div>}
                     {
-                        historyManagerOpen && viewingAccount && (
-                            <HistoryManagerModal
-                                isOpen={historyManagerOpen}
-                                onClose={() => setHistoryManagerOpen(false)}
-                                history={history}
-                                accountId={viewingAccount.id}
-                                theme={theme}
-                                onUpdateHistory={handleUpdateHistory}
-                            />
-                        )
+
                     }
                 </ErrorBoundary >
             </div >
