@@ -30,7 +30,7 @@ export const handler = async function (event, context) {
 
         const genAI = new GoogleGenerativeAI(apiKey);
         // Use Flash model for speed and higher quota
-        const model = genAI.getGenerativeModel({ model: "models/gemini-3.0-flash" });
+        const model = genAI.getGenerativeModel({ model: "models/gemini-2.5-flash" });
 
         const result = await model.generateContent(message);
         const response = await result.response;

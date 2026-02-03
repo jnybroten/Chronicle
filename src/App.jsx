@@ -1,4 +1,5 @@
 ﻿import React, { useState, useEffect, useMemo } from 'react';
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 
 import firebase, { auth, db, googleProvider } from './lib/firebase';
@@ -226,7 +227,7 @@ const ChronicleApp = () => {
     const [scribePreview, setScribePreview] = useState(null);
     const [isListening, setIsListening] = useState(false);
     const [isProcessingScribe, setIsProcessingScribe] = useState(false);
-    // const [geminiApiKey, setGeminiApiKey] = useState(''); // Removed state
+    const [geminiApiKey, setGeminiApiKey] = useState('');
 
     const [testScribeResult, setTestScribeResult] = useState(null);
 
@@ -699,6 +700,25 @@ const ChronicleApp = () => {
     };
 
 
+    const handleTestScribe = async () => {
+        if (!geminiApiKey) {
+            showToast('error', 'Please enter an API Key first');
+            return;
+        }
+        setTestScribeResult('Testing connection...');
+        try {
+            const genAI = new GoogleGenerativeAI(geminiApiKey);
+            const model = genAI.getGenerativeModel({ model: "models/gemini-2.5-flash" });
+            const result = await model.generateContent("Hello, are you functional? Reply with 'Scribe Online'.");
+            const response = await result.response;
+            const text = response.text();
+            setTestScribeResult('Success: ' + text);
+        } catch (error) {
+            console.error(error);
+            setTestScribeResult('Error: ' + error.message);
+        }
+    };
+
     const toggleDarkMode = () => { const m = !darkMode; setDarkMode(m); if (user) setDoc(doc(getSubColl(user.uid, 'settings'), 'config'), { darkMode: m }, { merge: true }); };
 
     const filteredTransactions = useMemo(() => {
@@ -1103,22 +1123,37 @@ const ChronicleApp = () => {
                 - Always include at least one relevant tag if possible.
             `;
 
-            // Call Netlify Function
-            const response = await fetch('/.netlify/functions/scribe', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: systemPrompt + "\nUser Input: " + textToProcess })
-            });
+            // Call Netlify Function (PROD) or Direct Client (DEV)
+            let clean;
 
-            if (!response.ok) {
-                const errData = await response.json();
-                throw new Error(errData.error || 'Netlify function failed');
+            if (import.meta.env.DEV) {
+                console.log("Local Dev Mode: Calling Gemini Direct");
+                if (!geminiApiKey) throw new Error("Local Dev: Missing Gemini API Key in Settings");
+
+                const genAI = new GoogleGenerativeAI(geminiApiKey);
+                const model = genAI.getGenerativeModel({ model: "models/gemini-2.5-flash" });
+
+                const result = await model.generateContent(systemPrompt + "\nUser Input: " + textToProcess);
+                const response = await result.response;
+                const text = response.text();
+                clean = text.replace(/```json/g, '').replace(/```/g, '').trim();
+
+            } else {
+                const response = await fetch('/.netlify/functions/scribe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: systemPrompt + "\nUser Input: " + textToProcess })
+                });
+
+                if (!response.ok) {
+                    const errData = await response.json();
+                    throw new Error(errData.error || 'Netlify function failed');
+                }
+
+                const data = await response.json();
+                const responseText = data.text;
+                clean = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
             }
-
-            const data = await response.json();
-            const responseText = data.text;
-
-            const clean = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
 
             let rawData;
             try { rawData = JSON.parse(clean); }
@@ -1900,6 +1935,30 @@ const ChronicleApp = () => {
                                                                 <div className="mb-4">
                                                                     <label className="block text-xs font-bold mb-1">User ID</label>
                                                                     <code className="block w-full p-2 bg-white border rounded text-xs overflow-x-auto">{user?.uid}</code>
+                                                                </div>
+
+                                                                <div className="mb-4">
+                                                                    <label className="block text-xs font-bold mb-1">Test Scribe Connection</label>
+                                                                    <div className="flex gap-2 mb-2">
+                                                                        <input
+                                                                            type="password"
+                                                                            placeholder="Enter Gemini API Key"
+                                                                            value={geminiApiKey}
+                                                                            onChange={(e) => setGeminiApiKey(e.target.value)}
+                                                                            className="flex-1 p-2 border rounded text-sm"
+                                                                        />
+                                                                        <button
+                                                                            onClick={handleTestScribe}
+                                                                            className="bg-amber-600 text-white px-3 py-1 rounded text-sm font-bold"
+                                                                        >
+                                                                            Test
+                                                                        </button>
+                                                                    </div>
+                                                                    {testScribeResult && (
+                                                                        <div className={`text-xs p-2 rounded ${testScribeResult.startsWith('Success') ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+                                                                            {testScribeResult}
+                                                                        </div>
+                                                                    )}
                                                                 </div>
 
 
