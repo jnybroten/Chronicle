@@ -24,8 +24,13 @@ const VoiceCapture = () => {
     const [transcript, setTranscript] = useState('');
     const [status, setStatus] = useState('Idle');
     const [savedCount, setSavedCount] = useState(0);
+    const [quickActions, setQuickActions] = useState([]);
+    const [isManageMode, setIsManageMode] = useState(false);
 
     useEffect(() => {
+        const storedActions = JSON.parse(localStorage.getItem('chronicle_quick_actions') || '[]');
+        setQuickActions(storedActions);
+
         if (!('webkitSpeechRecognition' in window)) {
             setStatus('Speech recognition not supported.');
             return;
@@ -65,21 +70,38 @@ const VoiceCapture = () => {
         recognition.start();
     };
 
-    const handleSave = () => {
-        if (!transcript.trim()) return;
+    const handleSave = (textToSave = null) => {
+        const finalTranscript = textToSave || transcript;
+        if (!finalTranscript || !finalTranscript.trim()) return;
+
         const inbox = JSON.parse(localStorage.getItem('chronicle_inbox') || '[]');
-        inbox.push({ text: transcript, date: new Date().toISOString(), id: Date.now() });
+        inbox.push({ text: finalTranscript, date: new Date().toISOString(), id: Date.now() });
         localStorage.setItem('chronicle_inbox', JSON.stringify(inbox));
 
         setSavedCount(c => c + 1);
-        setTranscript('');
+        if (!textToSave) setTranscript('');
         setStatus('Saved!');
-        // Optional: Auto-restart listening after short delay?
-        // setTimeout(startListening, 1000); 
+    };
+
+    const saveQuickAction = () => {
+        if (!transcript.trim()) return;
+        const label = prompt("Enter a label for this shortcut (e.g. 'Coffee'):");
+        if (label) {
+            const newAction = { id: Date.now(), label, text: transcript };
+            const updatedActions = [...quickActions, newAction];
+            setQuickActions(updatedActions);
+            localStorage.setItem('chronicle_quick_actions', JSON.stringify(updatedActions));
+        }
+    };
+
+    const deleteQuickAction = (id) => {
+        const updatedActions = quickActions.filter(a => a.id !== id);
+        setQuickActions(updatedActions);
+        localStorage.setItem('chronicle_quick_actions', JSON.stringify(updatedActions));
     };
 
     return (
-        <div className="fixed inset-0 bg-black text-white flex flex-col items-center justify-center p-6 z-50">
+        <div className="fixed inset-0 bg-black text-white flex flex-col items-center justify-center p-6 z-50 overflow-y-auto">
             <h2 className="text-2xl font-bold mb-6 font-cinzel">Quick Capture</h2>
 
             <div className="relative mb-8 group cursor-pointer" onClick={isRecording ? () => { } : startListening}>
@@ -96,9 +118,9 @@ const VoiceCapture = () => {
                 className="w-full max-w-md bg-white/10 p-4 rounded-lg text-lg mb-4 h-32 outline-none focus:ring-2 ring-emerald-500/50"
             />
 
-            <div className="flex gap-4 w-full max-w-md">
+            <div className="flex gap-4 w-full max-w-md mb-6">
                 <button
-                    onClick={handleSave}
+                    onClick={() => handleSave()}
                     disabled={!transcript.trim()}
                     className="flex-1 bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-500 text-white p-4 rounded-lg font-bold flex flex-col items-center gap-1"
                 >
@@ -106,23 +128,75 @@ const VoiceCapture = () => {
                     <span>Save Item</span>
                 </button>
                 <button
+                    onClick={saveQuickAction}
+                    disabled={!transcript.trim()}
+                    className="p-4 rounded-lg bg-amber-600/20 hover:bg-amber-600/40 text-amber-400 disabled:opacity-50 flex flex-col items-center justify-center gap-1 w-20"
+                    title="Save as Shortcut"
+                >
+                    <Sparkles size={24} />
+                    <span className="text-[10px] font-bold">SHORTCUT</span>
+                </button>
+                <button
                     onClick={() => setTranscript('')}
                     disabled={!transcript}
-                    className="p-4 rounded-lg bg-white/10 hover:bg-white/20 text-white"
+                    className="p-4 rounded-lg bg-white/10 hover:bg-white/20 text-white w-16 flex items-center justify-center"
                 >
                     <Trash2 size={24} />
                 </button>
             </div>
 
+            {/* Quick Actions Grid */}
+            <div className="w-full max-w-md">
+                <div className="flex justify-between items-center mb-2 px-1">
+                    <h3 className="text-sm font-bold opacity-60 uppercase tracking-widest">Quick Actions</h3>
+                    {quickActions.length > 0 && (
+                        <button
+                            onClick={() => setIsManageMode(!isManageMode)}
+                            className={`text-xs px-2 py-1 rounded ${isManageMode ? 'bg-red-500/20 text-red-300' : 'hover:bg-white/10 text-gray-400'}`}
+                        >
+                            {isManageMode ? 'Done' : 'Manage'}
+                        </button>
+                    )}
+                </div>
+
+                {quickActions.length === 0 ? (
+                    <div className="text-center p-4 border border-dashed border-white/10 rounded-lg text-gray-500 text-sm italic">
+                        Type a transaction above and tap "Shortcut" to save it here.
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        {quickActions.map(action => (
+                            <div key={action.id} className="relative group">
+                                <button
+                                    onClick={() => !isManageMode && handleSave(action.text)}
+                                    className={`w-full p-3 rounded-lg text-left transition-all border border-transparent ${isManageMode ? 'bg-white/5 opacity-50 cursor-default' : 'bg-white/10 hover:bg-white/20 hover:border-white/30 active:scale-95'}`}
+                                >
+                                    <div className="font-bold text-sm truncate">{action.label}</div>
+                                    <div className="text-xs opacity-50 truncate">{action.text}</div>
+                                </button>
+                                {isManageMode && (
+                                    <button
+                                        onClick={() => deleteQuickAction(action.id)}
+                                        className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1 shadow-lg hover:bg-red-700"
+                                    >
+                                        <X size={12} />
+                                    </button>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
             {savedCount > 0 && (
-                <div className="mt-4 text-emerald-400 font-bold animate-in fade-in slide-in-from-bottom-2">
+                <div className="mt-6 text-emerald-400 font-bold animate-in fade-in slide-in-from-bottom-2">
                     {savedCount} item{savedCount !== 1 ? 's' : ''} saved to Inbox
                 </div>
             )}
 
             <button
                 onClick={() => window.location.href = '/'}
-                className="mt-12 text-sm text-gray-400 hover:text-white border-b border-transparent hover:border-white transition-all"
+                className="mt-12 text-sm text-gray-400 hover:text-white border-b border-transparent hover:border-white transition-all pb-0.5"
             >
                 Return to Dashboard
             </button>
